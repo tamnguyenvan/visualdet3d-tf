@@ -1,0 +1,7 @@
+tensorflow-gpu
+opencv-python
+numba
+pyyaml
+easydict
+scikit-image
+git+https://github.com/smallsunsun1/addons.git@feature/deformable_op
