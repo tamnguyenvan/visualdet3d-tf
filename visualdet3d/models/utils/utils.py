@@ -6,6 +6,7 @@ from typing import Union
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras import layers
+from tensorflow.python.keras.backend import expand_dims, maximum
 from visualdet3d.utils import alpha_to_theta_3d
 
 
@@ -95,43 +96,19 @@ def calc_iou(a, b):
       iou: tf.Tensor
         Intersection over Union matrix shape of (M, N)
     """
-    a = tf.expand_dims(a, 1)
-    b = tf.expand_dims(b, 0)
+    area = (b[:, 2] - b[:, 0]) * (b[:, 3] - b[:, 1])
+    iw = tf.minimum(tf.expand_dims(a[:, 2], axis=1), b[:, 2]) - tf.maximum(tf.expand_dims(a[:, 0], axis=1), b[:, 0])
+    ih = tf.minimum(tf.expand_dims(a[:, 3], axis=1), b[:, 3]) - tf.maximum(tf.expand_dims(a[:, 1], axis=1), b[:, 1])
 
-    new_shape = tf.broadcast_dynamic_shape(tf.shape(a), tf.shape(b))
-    box1 = tf.broadcast_to(a, new_shape)
-    box2 = tf.broadcast_to(b, new_shape)
+    iw = tf.maximum(iw, 0.)
+    ih = tf.maximum(ih, 0.)
 
-    int_w = tf.maximum(tf.minimum(box1[..., 2], box2[..., 2]) -
-                       tf.maximum(box1[..., 0], box2[..., 0]), 0)
-    int_h = tf.maximum(tf.minimum(box1[..., 3], box2[..., 3]) -
-                       tf.maximum(box1[..., 1], box2[..., 1]), 0)
-    int_area = int_w * int_h
-    box_1_area = (box1[..., 2] - box1[..., 0]) * \
-        (box1[..., 3] - box1[..., 1])
-    box_2_area = (box2[..., 2] - box2[..., 0]) * \
-        (box2[..., 3] - box2[..., 1])
-    iou = int_area / (box_1_area + box_2_area - int_area)
+    ua = tf.expand_dims((a[:, 2] - a[:, 0]) * (a[:, 3] - a[:, 1]), axis=1) + area - iw * ih
+    ua = tf.maximum(ua, 1e-8)
+
+    intersection = iw * ih
+    iou = intersection / ua
     return iou
-
-    # area = (b[:, 2] - b[:, 0]) * (b[:, 3] - b[:, 1])
-
-    # iw = torch.min(tf.expand_dims(a[:, 2], axis=1), b[:, 2]) - torch.max(torch.unsqueeze(a[:, 0], 1), b[:, 0])
-    # ih = torch.min(torch.unsqueeze(a[:, 3], dim=1), b[:, 3]) - torch.max(torch.unsqueeze(a[:, 1], 1), b[:, 1])
-
-    # iw = torch.clamp(iw, min=0)
-    # ih = torch.clamp(ih, min=0)
-
-    # ua = torch.unsqueeze((a[:, 2] - a[:, 0]) * (a[:, 3] - a[:, 1]), dim=1) + area - iw * ih
-
-    # ua = torch.clamp(ua, min=1e-8)
-
-    # intersection = iw * ih
-
-    # iou = intersection / ua
-
-    # return iou
-
 
 class BBoxTransform(layers.Layer):
     """

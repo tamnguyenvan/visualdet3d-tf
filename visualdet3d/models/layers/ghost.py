@@ -17,7 +17,7 @@ class GhostLayer(layers.Layer):
             # layers.Conv2D(init_channels, kernel_size, 1, kernel_size // 2, use_bias=False),
             conv(init_channels, kernel_size, 1, kernel_size // 2, use_bias=False),
             layers.BatchNormalization(),
-            layers.ReLU() if relu else keras.Sequential(),
+            layers.ReLU() if relu else identity(),
         ])
 
         self.cheap_operation = keras.Sequential([
@@ -30,8 +30,8 @@ class GhostLayer(layers.Layer):
     def call(self, x):
         x1 = self.primary_conv(x)
         x2 = self.cheap_operation(x1)
-        out = tf.concat([x1, x2], dim=1)
-        return out[:, :self.oup, :, :]
+        out = tf.concat([x1, x2], axis=-1)
+        return out[:, :, :, :self.oup]
 
 
 class ResGhostLayer(GhostLayer):
@@ -51,5 +51,5 @@ class ResGhostLayer(GhostLayer):
 
         if not self.downsample is None:
             x = self.downsample(x)
-        out = tf.concat([x, x1, x2], dim=1)
-        return out[:, :self.oup, :, :]
+        out = tf.concat([x, x1, x2], axis=-1)
+        return out[:, :, :, :self.oup]

@@ -65,7 +65,8 @@ def read_one_split(cfg,
     if anchor_prior:
         anchor_manager = Anchors(cfg.path.preprocessed_path,
                                  read_config_file=False,
-                                 **cfg.detector.head.anchors_config)
+                                 data_format='channels_first',
+                                 **cfg.detector.head.anchors_cfg)
         preprocess = get_transform(cfg.data.augmentation.test)
         total_objects = [0 for _ in range(len(cfg.classes))]
         total_usable_objects = [0 for _ in range(len(cfg.classes))]
@@ -143,12 +144,12 @@ def read_one_split(cfg,
 
                     num_usable_object = int(tf.squeeze(
                         tf.reduce_sum(
-                            tf.cast(iou_max > cfg.detector.head.loss_config.fg_iou_threshold, tf.int32)
+                            tf.cast(iou_max > cfg.detector.head.loss_cfg.fg_iou_threshold, tf.int32)
                         )
                     ).numpy())
                     total_usable_objects[j] += num_usable_object
 
-                    positive_anchors_mask = iou_max_anchor > cfg.detector.head.loss_config.fg_iou_threshold
+                    positive_anchors_mask = iou_max_anchor > cfg.detector.head.loss_cfg.fg_iou_threshold
                     # positive_ground_truth_3d = bbox3d[iou_argmax_anchor[positive_anchors_mask]].numpy()
                     positive_ground_truth_3d = tf.gather_nd(
                         bbox3d,

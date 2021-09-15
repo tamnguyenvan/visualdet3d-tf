@@ -52,10 +52,10 @@ class KittiStereoDataset(tf.keras.utils.Sequence):
             bbox3d_origin = tf.constant([
                 [obj.x, obj.y - 0.5 * obj.h, obj.z, obj.w, obj.h, obj.l, obj.alpha]
                 for obj in transformed_label], dtype=tf.float32)
-            # try:
-            abs_corner, homo_corner, _ = self.projector(bbox3d_origin, tf.constant(P2, dtype=bbox3d_origin.dtype))
-            # except:
-            #     print('\n',bbox3d_origin.shape, len(transformed_label), transformed_label, bbox3d_origin)
+            try:
+                abs_corner, homo_corner, _ = self.projector(bbox3d_origin, tf.constant(P2, dtype=bbox3d_origin.dtype))
+            except Exception as e:
+                raise Exception('\n',bbox3d_origin.shape, len(transformed_label), transformed_label, bbox3d_origin)
 
             for i, obj in enumerate(transformed_label):
                 extended_center = np.array([obj.x, obj.y - 0.5 * obj.h, obj.z, 1])[:, np.newaxis] #[4, 1]
@@ -70,7 +70,7 @@ class KittiStereoDataset(tf.keras.utils.Sequence):
                                                  [obj.w, obj.h, obj.l, obj.alpha]]) #[7]
 
             max_xy = tf.reduce_max(homo_corner[:, :, 0:2], axis=1)  # [N,2]
-            min_xy = tf.reduce_max(homo_corner[:, :, 0:2], axis=1)  # [N,2]
+            min_xy = tf.reduce_min(homo_corner[:, :, 0:2], axis=1)  # [N,2]
 
             result = tf.concat([min_xy, max_xy], axis=-1) #[:, 4]
 
@@ -132,7 +132,6 @@ class KittiStereoDataset(tf.keras.utils.Sequence):
         return output_dict
     
     def collate_fn(self, batch):
-        # TODO: (B, C, H, W)?
         left_images = np.array([item['image'][0] for item in batch])  # [batch, H, W, 3]
 
         right_images = np.array([item['image'][1] for item in batch])  # [batch, H, W, 3]
@@ -170,7 +169,7 @@ class KittiStereoDataset(tf.keras.utils.Sequence):
         batch_size = self.cfg.data.batch_size
         inputs_list = []
         for i in range(idx*batch_size, (idx+1)*batch_size):
-            sample_input = self._load_single_sample(idx)
+            sample_input = self._load_single_sample(i)
             inputs_list.append(sample_input)
         return self.collate_fn(inputs_list)
 

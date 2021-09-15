@@ -15,7 +15,8 @@ class Anchors(layers.Layer):
                        ratios: List[float],
                        scales: List[float],
                        read_config_file: int=1,
-                       obj_types: List[str]=[],
+                       data_format: str='channels_last',
+                       classes: List[str]=[],
                        filter_anchors: bool=True,
                        filter_y_threshold_min_max: Optional[Tuple[float, float]]=(-0.5, 1.8),
                        filter_x_threshold: Optional[float]=40.0,
@@ -30,23 +31,24 @@ class Anchors(layers.Layer):
         self.shape = None
         self.P2 = None
         self.read_config_file = read_config_file
+        self.data_format = data_format
 
         self.scale_step = 1 / (np.log2(self.scales[1]) - np.log2(self.scales[0]))
         if self.read_config_file:
             self.anchors_mean_original = np.zeros([
-                len(obj_types),
+                len(classes),
                 len(self.scales) * len(self.pyramid_levels),
                 len(self.ratios), anchor_prior_channel])
             self.anchors_std_original = np.zeros([
-                len(obj_types),
+                len(classes),
                 len(self.scales) * len(self.pyramid_levels),
                 len(self.ratios), anchor_prior_channel])
             save_dir = os.path.join(preprocessed_path, 'training')
-            for i in range(len(obj_types)):
-                npy_file = os.path.join(save_dir,'anchor_mean_{}.npy'.format(obj_types[i]))
+            for i in range(len(classes)):
+                npy_file = os.path.join(save_dir,'anchor_mean_{}.npy'.format(classes[i]))
                 self.anchors_mean_original[i]  = np.load(npy_file) #[30, 2, 6] #[z,  sinalpha, cosalpha, w, h, l,]
 
-                std_file = os.path.join(save_dir,'anchor_std_{}.npy'.format(obj_types[i]))
+                std_file = os.path.join(save_dir,'anchor_std_{}.npy'.format(classes[i]))
                 self.anchors_std_original[i] = np.load(std_file) #[30, 2, 6] #[z,  sinalpha, cosalpha, w, h, l,]
 
         self.filter_y_threshold_min_max = filter_y_threshold_min_max
@@ -66,14 +68,21 @@ class Anchors(layers.Layer):
         ratio_int = np.argmin(np.abs(ratio_diff), axis=0)
         return sizes_int, ratio_int
 
-    def call(self, image: tf.Tensor, calibs: List[np.ndarray]=[], is_filtering=False):
+    def call(self,
+             image: tf.Tensor,
+             calibs: List[np.ndarray]=[],
+             is_filtering=False):
         """
         """
         shape = tf.shape(image)[2:]
         if self.shape is None or not any(shape == self.shape):
-            self.shape = image.shape[2:]
-            
-            image_shape = image.shape[2:]
+            if self.data_format == 'channels_last':
+                self.shape = image.shape[1:3]
+                
+                image_shape = image.shape[1:3]
+            else:
+                self.shape = image.shape[2:]
+                image_shape = image.shape[2:]
             image_shape = np.array(image_shape)
             image_shapes = [(image_shape + 2 ** x - 1) // (2 ** x) for x in self.pyramid_levels]
 
@@ -87,10 +96,8 @@ class Anchors(layers.Layer):
 
             if self.read_config_file:
                 sizes_int, ratio_int = self.anchors_to_indexes(all_anchors)
-                # self.anchor_means = image.new(self.anchors_mean_original[:, sizes_int, ratio_int]) #[types, N, 6]
-                # self.anchor_stds  = image.new(self.anchors_std_original[:, sizes_int, ratio_int]) #[types, N, 6]
-                self.anchor_means = tf.convert_to_tensor(self.anchors_mean_original[:, sizes_int, ratio_int])
-                self.anchor_stds = tf.convert_to_tensor(self.anchors_mean_original[:, sizes_int, ratio_int])
+                self.anchor_means = tf.convert_to_tensor(self.anchors_mean_original[:, sizes_int, ratio_int], dtype=tf.float32)
+                self.anchor_stds = tf.convert_to_tensor(self.anchors_std_original[:, sizes_int, ratio_int], dtype=tf.float32)
                 self.anchor_mean_std = tf.transpose(
                     tf.stack([self.anchor_means, self.anchor_stds], axis=-1),
                     (1, 0, 2, 3)) #[N, types, 6, 2]
@@ -105,8 +112,6 @@ class Anchors(layers.Layer):
             self.anchors_image_y_center = tf.reduce_mean(self.anchors[0,:,1:4:2], axis=1) #[N]
 
         if calibs is not None and len(calibs) > 0:
-            #P2 = calibs.P2 #[3, 4]
-            #P2 = np.stack([calib for calib in calibs]) #[B, 3, 4]
             P2 = calibs #[B, 3, 4]
             if self.P2 is not None and tf.reduce_all(self.P2 == P2) and self.P2.shape == P2.shape:
                 if self.read_config_file:
@@ -121,11 +126,11 @@ class Anchors(layers.Layer):
             N = self.anchors.shape[1]
             if self.read_config_file and is_filtering:
                 anchors_z = self.anchor_means[:, :, 0] #[types, N]
-                world_x3d = (self.anchors_image_x_center * anchors_z - anchors_z.new(cx) * anchors_z) / anchors_z.new(fy) #[B, types, N]
-                world_y3d = (self.anchors_image_y_center * anchors_z - anchors_z.new(cy) * anchors_z) / anchors_z.new(fy) #[B, types, N]
-                self.useful_mask = tf.reduce_any((world_y3d > self.filter_y_threshold_min_max[0]) * 
-                                              (world_y3d < self.filter_y_threshold_min_max[1]) *
-                                              (world_x3d.abs() < self.filter_x_threshold), dim=1)  #[B,N] any one type lies in target range
+                world_x3d = (self.anchors_image_x_center * anchors_z - tf.cast(cx, anchors_z.dtype) * anchors_z) / tf.cast(fy, anchors_z.dtype) #[B, types, N]
+                world_y3d = (self.anchors_image_y_center * anchors_z - tf.cast(cy, anchors_z.dtype) * anchors_z) / tf.cast(fy, anchors_z.dtype) #[B, types, N]
+                self.useful_mask = tf.reduce_any(tf.cast(tf.cast(world_y3d > self.filter_y_threshold_min_max[0], tf.int32) * 
+                                              tf.cast(world_y3d < self.filter_y_threshold_min_max[1], tf.int32) *
+                                              tf.cast(tf.abs(world_x3d) < self.filter_x_threshold, tf.int32), tf.bool), axis=1)  #[B,N] any one type lies in target range
             else:
                 self.useful_mask = tf.ones([len(P2), N], dtype=tf.bool)
             if self.read_config_file:

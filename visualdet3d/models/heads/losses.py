@@ -7,8 +7,11 @@ from visualdet3d.models.lib.disparity_loss import stereo_focal_loss
 
 
 class SigmoidFocalLoss(losses.Loss):
-    def __init__(self, gamma=0.0, balance_weights=tf.constant([1.0], dtype=tf.float32)):
-        super(SigmoidFocalLoss, self).__init__()
+    def __init__(self,
+                 gamma=0.0,
+                 balance_weights=tf.constant([1.0], dtype=tf.float32),
+                 reduction=tf.keras.losses.Reduction.NONE):
+        super(SigmoidFocalLoss, self).__init__(reduction=reduction)
         self.gamma = gamma
         self.balance_weights = balance_weights
 
@@ -30,8 +33,9 @@ class SigmoidFocalLoss(losses.Loss):
         if balance_weights is None:
             balance_weights = self.balance_weights
 
+        targets = tf.cast(targets, dtype=tf.float32)
         probs = tf.sigmoid(classification)  #[B, N, 1]
-        focal_weight = tf.where(tf.equal(targets, 1.), 1. - probs, probs)
+        focal_weight = tf.where(tf.equal(targets, 1.0), 1. - probs, probs)
         focal_weight = tf.pow(focal_weight, gamma)
 
         bce = -(targets * tf.math.log_sigmoid(classification)) * balance_weights \
@@ -48,8 +52,8 @@ class SigmoidFocalLoss(losses.Loss):
 
 
 class SoftmaxFocalLoss(losses.Loss):
-    def __init__(self):
-        super(SoftmaxFocalLoss, self).__init__()
+    def __init__(self, reduction=tf.keras.losses.Reduction.NONE):
+        super(SoftmaxFocalLoss, self).__init__(reduction=reduction)
 
     def call(self,
              classification: tf.Tensor, 
@@ -75,8 +79,9 @@ class SoftmaxFocalLoss(losses.Loss):
 
 
 class ModifiedSmoothL1Loss(losses.Loss):
-    def __init__(self, l1_regression_alpha: float):
-        super(ModifiedSmoothL1Loss, self).__init__()
+    def __init__(self, l1_regression_alpha: float,
+                 reduction=tf.keras.losses.Reduction.NONE):
+        super(ModifiedSmoothL1Loss, self).__init__(reduction=reduction)
         self.alpha = l1_regression_alpha
 
     def call(self, normed_targets: tf.Tensor, pos_reg: tf.Tensor):
@@ -99,8 +104,8 @@ class ModifiedSmoothL1Loss(losses.Loss):
 
 
 class IoULoss(losses.Loss):
-    def __init__(self):
-        super(IoULoss, self).__init__()
+    def __init__(self, reduction=tf.keras.losses.Reduction.NONE):
+        super(IoULoss, self).__init__(reduction=reduction)
 
     def call(self, preds: tf.Tensor, targets: tf.Tensor, eps:float=1e-8):
         """IoU Loss
@@ -131,11 +136,15 @@ class IoULoss(losses.Loss):
 
 
 class DisparityLoss(losses.Loss):
-    def __init__(self, maxdisp: int=64):
-        super(DisparityLoss, self).__init__()
+    def __init__(self,
+                 maxdisp: int=64,
+                 reduction=tf.keras.losses.Reduction.NONE):
+        super(DisparityLoss, self).__init__(reduction=reduction)
         self.criterion = stereo_focal_loss.StereoFocalLoss(maxdisp)
 
     def call(self, x: tf.Tensor, label: tf.Tensor):
         label = tf.expand_dims(label, axis=1)
+        # BxHxWxC -> BxCxHxW
+        x = tf.transpose(x, (0, 3, 1, 2))
         loss = self.criterion(x, label, variance=0.5)
         return loss

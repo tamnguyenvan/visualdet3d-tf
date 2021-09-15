@@ -4,10 +4,15 @@ from tensorflow.keras import layers
 
 
 def identity(name=None):
-    return layers.Lambda(lambda x: tf.identity(x, name=None))
+    return layers.Lambda(lambda x: tf.identity(x, name=name))
 
 
-def conv_bn_relu(filters, kernel_size=3, stride=1, padding=1, dilation=1, name=None):
+def conv_bn_relu(filters,
+                 kernel_size=3,
+                 stride=1,
+                 padding=1,
+                 dilation=1,
+                 name=None):
     """Convolution + Batch Normalization + ReLU"""
     return keras.Sequential([
         layers.ZeroPadding2D(padding),
@@ -19,7 +24,7 @@ def conv_bn_relu(filters, kernel_size=3, stride=1, padding=1, dilation=1, name=N
                       use_bias=False),
         layers.BatchNormalization(),
         layers.ReLU(),
-    ])
+    ], name=name)
 
 
 def conv(filters,
@@ -97,7 +102,10 @@ def conv7x7(filters,
                 name=name)
 
 
-def conv3d_3x3(filters, stride=1, padding=1, name=None):
+def conv3d_3x3(filters,
+               stride=1,
+               padding=1,
+               name=None):
     """3D convolution with padding."""
     return keras.Sequential([
         layers.ZeroPadding3D(padding),

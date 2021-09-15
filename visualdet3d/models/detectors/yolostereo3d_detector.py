@@ -25,8 +25,8 @@ class Stereo3D(keras.Model):
     
     def train_step(self, x):
         left_images, right_images, annotations, P2, P3, disparity = x
-        output_dict = self.core(tf.concat([left_images, right_images], axis=1))
-        depth_output   = output_dict['depth_output']
+        output_dict = self.core(tf.concat([left_images, right_images], axis=-1))
+        depth_output = output_dict['depth_output']
 
         cls_preds, reg_preds = self.bbox_head(
             dict(
@@ -36,12 +36,12 @@ class Stereo3D(keras.Model):
             )
         )
 
-        anchors = self.bbox_head.get_anchor(left_images, P2)
+        anchors = self.bbox_head.get_anchor(left_images, P2, training=True)
 
         cls_loss, reg_loss, loss_dict = self.bbox_head.loss(
             cls_preds, reg_preds, anchors, annotations, P2)
 
-        if reg_loss.mean() > 0 and not disparity is None and not depth_output is None:
+        if tf.reduce_mean(reg_loss) > 0 and not disparity is None and not depth_output is None:
             disp_loss = 1.0 * self.disparity_loss(depth_output, disparity)
             loss_dict['disparity_loss'] = disp_loss
             reg_loss += disp_loss

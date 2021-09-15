@@ -30,6 +30,10 @@ def train_stereo_detection(data,
     cls_loss, reg_loss, loss_dict = model(
         [left_images, right_images, annotation, P2, P3, disparity]
     )
+    num_params = 0
+    for var in model.trainable_variables:
+        num_params += tf.reduce_prod(tf.shape(var))
+    print('Trainable params: {}M'.format(num_params.numpy()/1e6))
 
     cls_loss = tf.reduce_mean(cls_loss)
     reg_loss = tf.reduce_mean(reg_loss)
@@ -48,6 +52,7 @@ def main():
 
     # Build model
     model = get_detector(cfg)
+    # model.summary()
 
     # Build optimizer and scheduler
     optimizer = get_optimizer(cfg)
@@ -57,7 +62,7 @@ def main():
     for epoch in range(cfg.trainer.max_epochs):
         for idx, data in enumerate(train_loader):
             loss = train_stereo_detection(data, model, optimizer, cfg=cfg)
-            print('Loss:', loss.numpy())
+            print(f'[Epoch {epoch+1:03d} iter {idx+1:04d}] Loss: {loss.numpy():.4f}')
 
 
 if __name__ == '__main__':

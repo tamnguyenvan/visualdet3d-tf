@@ -73,8 +73,8 @@ class AnchorBasedDetection3DHead(layers.Layer):
             # nn.Conv2d(cls_feature_size, num_anchors*(num_cls_output), kernel_size=3, padding=1),
             # AnchorFlatten(num_cls_output)
         ])
-        self.cls_feature_extraction[-2].weight.data.fill_(0)
-        self.cls_feature_extraction[-2].bias.data.fill_(0)
+        # self.cls_feature_extraction[-2].weight.data.fill_(0)
+        # self.cls_feature_extraction[-2].bias.data.fill_(0)
 
         self.reg_feature_extraction = keras.Sequential([
             # TODO: ModulatedDeformConvPack
@@ -111,14 +111,25 @@ class AnchorBasedDetection3DHead(layers.Layer):
     def build_loss(self, focal_loss_gamma=0.0, balance_weight=[0], L1_regression_alpha=9, **kwargs):
         self.focal_loss_gamma = focal_loss_gamma
         self.balance_weights = tf.constant(balance_weight, dtype=tf.float32)
-        self.loss_cls = SigmoidFocalLoss(gamma=focal_loss_gamma, balance_weights=self.balance_weights)
-        self.loss_bbox = ModifiedSmoothL1Loss(L1_regression_alpha)
+        self.loss_cls = SigmoidFocalLoss(
+            gamma=focal_loss_gamma,
+            balance_weights=self.balance_weights,
+            reduction=tf.keras.losses.Reduction.NONE
+        )
+        self.loss_bbox = ModifiedSmoothL1Loss(
+            L1_regression_alpha,
+            reduction=tf.keras.losses.Reduction.NONE
+        )
 
-        regression_weight = kwargs.get("regression_weight", [1 for _ in range(self.num_regression_loss_terms)]) #default 12 only use in 3D
+        regression_weight = kwargs.get("regression_weight",
+                                       [1 for _ in range(self.num_regression_loss_terms)]) #default 12 only use in 3D
         self.regression_weight = tf.constant(regression_weight, dtype=tf.float32)
 
         # self.alpha_loss = nn.BCEWithLogitsLoss(reduction='none')
-        self.alpha_loss = keras.losses.BinaryCrossentropy(from_logits=True)
+        self.alpha_loss = keras.losses.BinaryCrossentropy(
+            from_logits=True,
+            reduction=tf.keras.losses.Reduction.NONE
+        )
 
     def _assign(self, anchor, annotation, 
                     bg_iou_threshold=0.0,
@@ -137,20 +148,20 @@ class AnchorBasedDetection3DHead(layers.Layer):
         #     (N, ),
         #     -1, dtype=torch.long
         # ) #[N, ] torch.long
-        assigned_gt_inds = tf.fill((N,), -1, dtype=tf.int32)
+        assigned_gt_inds = tf.fill((N,), -1)
         # max_overlaps = anchor.new_zeros((N, ))
         max_overlaps = tf.zeros((N,), dtype=anchor.dtype)
         # assigned_labels = anchor.new_full((N, ),
         #     -1,
         #     dtype=torch.long)
-        assigned_labels = tf.fill((N,), -1, dtype=tf.int32)
+        assigned_labels = tf.fill((N,), -1)
 
         if num_gt == 0:
             # assigned_gt_inds = anchor.new_full(
             #     (N, ),
             #     0, dtype=torch.long
             # ) #[N, ] torch.long
-            assigned_gt_inds = tf.fill((N,), 0, dtype=tf.int32)
+            assigned_gt_inds = tf.fill((N,), 0)
             return_dict = dict(
                 num_gt=num_gt,
                 assigned_gt_inds=assigned_gt_inds,
@@ -172,31 +183,50 @@ class AnchorBasedDetection3DHead(layers.Layer):
         gt_argmax_overlaps = tf.argmax(IoU, axis=0)
 
         # assign negative
-        assigned_gt_inds[(max_overlaps >=0) & (max_overlaps < bg_iou_threshold)] = 0
+        indices = tf.where((max_overlaps >=0) & (max_overlaps < bg_iou_threshold))
+        updates = tf.zeros(indices.shape[0], dtype=assigned_gt_inds.dtype)
+        assigned_gt_inds = tf.tensor_scatter_nd_update(assigned_gt_inds, indices, updates)
+        # assigned_gt_inds[] = 0
 
         # assign positive
         pos_inds = max_overlaps >= fg_iou_threshold
-        assigned_gt_inds[pos_inds] = argmax_overlaps[pos_inds] + 1
+        indices = tf.where(pos_inds)
+        updates = tf.cast(argmax_overlaps[pos_inds] + 1, dtype=assigned_gt_inds.dtype)
+        assigned_gt_inds = tf.tensor_scatter_nd_update(assigned_gt_inds, indices, updates)
+        # assigned_gt_inds[pos_inds] = argmax_overlaps[pos_inds] + 1
 
         if match_low_quality:
             for i in range(num_gt):
                 if gt_max_overlaps[i] >= min_iou_threshold:
                     if gt_max_assign_all:
                         max_iou_inds = IoU[:, i] == gt_max_overlaps[i]
-                        assigned_gt_inds[max_iou_inds] = i+1
+                        indices = tf.where(max_iou_inds)
+                        updates = tf.cast(tf.fill(indices.shape[0], i+1), dtype=assigned_gt_inds.dtype)
+                        assigned_gt_inds = tf.tensor_scatter_nd_update(assigned_gt_inds, indices, updates)
+                        # assigned_gt_inds[max_iou_inds] = i+1
                     else:
-                        assigned_gt_inds[gt_argmax_overlaps[i]] = i+1
+                        indices = tf.reshape(gt_argmax_overlaps, (-1, 1))
+                        updates = tf.cast(tf.fill(indices.shape[0], i+1), dtype=assigned_gt_inds.dtype)
+                        assigned_gt_inds = tf.tensor_scatter_nd_update(assigned_gt_inds, indices, updates)
+                        # assigned_gt_inds[gt_argmax_overlaps[i]] = i+1
 
-        
-        assigned_labels = assigned_gt_inds.new_full((N, ), -1)
+        assigned_labels = tf.cast(tf.fill(N, -1), dtype=assigned_gt_inds.dtype)
+        # assigned_labels = assigned_gt_inds.new_full((N, ), -1)
         # pos_inds = torch.nonzero(
         #         assigned_gt_inds > 0, as_tuple=False
         #     ).squeeze()
-        pos_inds = tf.squeeze(tf.where(assigned_gt_inds > 0))
+        pos_inds = tf.cast(tf.squeeze(tf.where(assigned_gt_inds > 0), axis=1), dtype=tf.int32)
         # if pos_inds.numel()>0:
         if tf.size(pos_inds) > 0:
             # assigned_labels[pos_inds] = annotation[assigned_gt_inds[pos_inds] - 1, 4].long()
-            assigned_labels[pos_inds] = tf.cast(annotation[assigned_gt_inds[pos_inds] - 1, 4], tf.int32)
+            indices = tf.reshape(pos_inds, (-1, 1))
+            ann_inds = tf.gather(assigned_gt_inds, pos_inds) - 1
+            updates = tf.cast(
+                tf.gather_nd(annotation, tf.stack([ann_inds, tf.fill(ann_inds.shape[0], 4)], axis=1)),
+                tf.int32
+            )
+            # assigned_labels[pos_inds] = tf.cast(annotation[assigned_gt_inds[pos_inds] - 1, 4], tf.int32)
+            assigned_labels = tf.tensor_scatter_nd_update(assigned_labels, indices, updates)
 
         return_dict = dict(
             num_gt=num_gt,
@@ -245,12 +275,14 @@ class AnchorBasedDetection3DHead(layers.Layer):
                          targets_cd_sin, targets_cd_cos,
                          targets_w3d, targets_h3d, targets_l3d), axis=1)
 
-        stds = targets.new([0.1, 0.1, 0.2, 0.2, 0.1, 0.1, 1, 1, 1, 1, 1, 1])
+        # stds = targets.new([0.1, 0.1, 0.2, 0.2, 0.1, 0.1, 1, 1, 1, 1, 1, 1])
+        stds = tf.constant([0.1, 0.1, 0.2, 0.2, 0.1, 0.1, 1, 1, 1, 1, 1, 1])
 
-        targets = targets.div_(stds)
+        # targets = targets.div_(stds)
+        targets = tf.truediv(targets, stds)
 
         targets_alpha_cls = tf.cast(tf.math.cos(sampled_gt_bboxes[:, 11:12]) > 0, tf.float32)
-        return targets, targets_alpha_cls #[N, 4]
+        return targets, targets_alpha_cls  #[N, 4]
 
     def _decode(self, boxes, deltas, anchors_3d_mean_std, label_index, alpha_score):
         std = tf.constant([0.1, 0.1, 0.2, 0.2, 0.1, 0.1, 1, 1, 1, 1, 1, 1], dtype=tf.float32)
@@ -307,13 +339,15 @@ class AnchorBasedDetection3DHead(layers.Layer):
         # pos_inds = torch.nonzero(
         #         assignment_result['assigned_gt_inds'] > 0, as_tuple=False
         #     ).unsqueeze(-1).unique()
-        pos_inds = tf.unique(tf.expand_dims(
-            tf.where(assignment_result['assigned_gt_inds'] > 0), -1))
+        pos_inds = tf.unique(
+            tf.squeeze(tf.where(assignment_result['assigned_gt_inds'] > 0), 1))[0]
+        pos_inds = tf.cast(pos_inds, dtype=tf.int32)
         # neg_inds = torch.nonzero(
         #         assignment_result['assigned_gt_inds'] == 0, as_tuple=False
         #     ).unsqueeze(-1).unique()
-        neg_inds = tf.unique(tf.expand_dims(
-            tf.where(assignment_result['assigned_gt_inds'] == 0), -1))
+        neg_inds = tf.unique(
+            tf.squeeze(tf.where(assignment_result['assigned_gt_inds'] == 0), 1))[0]
+        neg_inds = tf.cast(neg_inds, dtype=tf.int32)
         # gt_flags = anchors.new_zeros(anchors.shape[0], dtype=torch.uint8) #
         gt_flags = tf.zeros(anchors.shape[0], dtype=tf.uint8)
 
@@ -321,16 +355,25 @@ class AnchorBasedDetection3DHead(layers.Layer):
 
         # if gt_bboxes.numel() == 0:
         if tf.size(gt_bboxes) == 0:
-            pos_gt_bboxes = gt_bboxes.new_zeros([0, 4])
+            # pos_gt_bboxes = gt_bboxes.new_zeros([0, 4])
+            pos_gt_bboxes = tf.zeros((0, 4), dtype=gt_bboxes.dtype)
         else:
-            pos_gt_bboxes = gt_bboxes[pos_assigned_gt_inds[pos_inds], :]
+            gt_inds = tf.gather(pos_assigned_gt_inds, pos_inds)
+            pos_gt_bboxes = tf.gather(
+                gt_bboxes,
+                gt_inds
+            )
+            # pos_gt_bboxes = gt_bboxes[pos_assigned_gt_inds[pos_inds], :]
         return_dict = dict(
             pos_inds=pos_inds,
             neg_inds=neg_inds,
-            pos_bboxes=anchors[pos_inds],
-            neg_bboxes=anchors[neg_inds],
+            # pos_bboxes=anchors[pos_inds],
+            pos_bboxes=tf.gather(anchors, pos_inds),
+            # neg_bboxes=anchors[neg_inds],
+            neg_bboxes=tf.gather(anchors, neg_inds),
             pos_gt_bboxes=pos_gt_bboxes,
-            pos_assigned_gt_inds=pos_assigned_gt_inds[pos_inds],
+            # pos_assigned_gt_inds=pos_assigned_gt_inds[pos_inds],
+            pos_assigned_gt_inds=tf.gather(pos_assigned_gt_inds, pos_inds),
         )
         return return_dict
 
@@ -350,16 +393,16 @@ class AnchorBasedDetection3DHead(layers.Layer):
         bboxes = tf.concat([bbox2d, bbox3d], axis=-1)
         return scores, bboxes, labels
 
-    def get_anchor(self, img_batch, P2):
+    def get_anchor(self, img_batch, P2, training=False):
         is_filtering = getattr(self.loss_cfg, 'filter_anchor', True)
-        if not self.training:
+        if not training:
             is_filtering = getattr(self.test_cfg, 'filter_anchor', is_filtering)
 
         anchors, useful_mask, anchor_mean_std = self.anchors(img_batch, P2, is_filtering=is_filtering)
         return_dict=dict(
             anchors=anchors, #[1, N, 4]
             mask=useful_mask, #[B, N]
-            anchor_mean_std_3d = anchor_mean_std  #[N, C, K=6, 2]
+            anchor_mean_std_3d=anchor_mean_std  #[N, C, K=6, 2]
         )
         return return_dict
 
@@ -488,18 +531,19 @@ class AnchorBasedDetection3DHead(layers.Layer):
             labels = tf.fill(
                 (num_valid_anchors, self.num_classes),
                 -1,
-                dtype=tf.float32,
             )
 
             pos_inds = sampling_result_dict['pos_inds']
             neg_inds = sampling_result_dict['neg_inds']
             
             if len(pos_inds) > 0:
-                pos_assigned_gt_label = bbox_annotation[sampling_result_dict['pos_assigned_gt_inds'], 4].long()
+                # pos_assigned_gt_label = bbox_annotation[sampling_result_dict['pos_assigned_gt_inds'], 4].long()
+                pos_assigned_gt_label = tf.cast(tf.gather(bbox_annotation[:, 4], sampling_result_dict['pos_assigned_gt_inds']), tf.int32)
                 
                 selected_mask, selected_anchor_3d = self._get_anchor_3d(
                     sampling_result_dict['pos_bboxes'],
-                    anchor_mean_std_3d_j[pos_inds],
+                    # anchor_mean_std_3d_j[pos_inds],
+                    tf.gather(anchor_mean_std_3d_j, pos_inds),
                     pos_assigned_gt_label,
                 )
                 if len(selected_anchor_3d) > 0:
@@ -512,19 +556,32 @@ class AnchorBasedDetection3DHead(layers.Layer):
                         pos_bboxes, pos_gt_bboxes, selected_anchor_3d
                     ) #[N, 12], [N, 1]
                     label_index = pos_assigned_gt_label[selected_mask]
-                    labels[pos_inds, :] = 0
-                    labels[pos_inds, label_index] = 1
 
-                    pos_anchor = anchor[pos_inds]
-                    pos_alpha_score = alpha_score[pos_inds]
+                    # Updates
+                    inds = tf.reshape(pos_inds, (-1, 1))
+                    updates = tf.zeros((inds.shape[0], labels.shape[1]), dtype=labels.dtype)
+                    labels = tf.tensor_scatter_nd_update(labels, inds, updates)
+                    # labels[pos_inds, :] = 0
+                    inds = tf.stack([pos_inds, label_index], axis=1)
+                    updates = tf.ones(inds.shape[0], dtype=labels.dtype)
+                    labels = tf.tensor_scatter_nd_update(labels, inds, updates)
+                    # labels[pos_inds, label_index] = 1
+
+                    pos_anchor = tf.gather(anchor, pos_inds)
+                    pos_alpha_score = tf.gather(alpha_score, pos_inds)
+                    # pos_anchor = anchor[pos_inds]
+                    # pos_alpha_score = alpha_score[pos_inds]
                     if self.decode_before_loss:
-                        pos_prediction_decoded = self._decode(pos_anchor, reg_pred[pos_inds],  anchors_3d_mean_std, label_index, pos_alpha_score)
-                        pos_target_decoded     = self._decode(pos_anchor, pos_bbox_targets,  anchors_3d_mean_std, label_index, pos_alpha_score)
+                        # TODO: What is ``anchors_3d_mean_std`?
+                        # pos_prediction_decoded = self._decode(pos_anchor, reg_pred[pos_inds],  anchors_3d_mean_std, label_index, pos_alpha_score)
+                        # pos_target_decoded     = self._decode(pos_anchor, pos_bbox_targets,  anchors_3d_mean_std, label_index, pos_alpha_score)
 
-                        reg_loss.append((self.loss_bbox(pos_prediction_decoded, pos_target_decoded)* self.regression_weight).mean(dim=0))
+                        # reg_loss.append((self.loss_bbox(pos_prediction_decoded, pos_target_decoded)* self.regression_weight).mean(dim=0))
+                        pass
                     else:
-                        reg_loss_j = self.loss_bbox(pos_bbox_targets, reg_pred[pos_inds]) 
+                        reg_loss_j = self.loss_bbox(pos_bbox_targets, tf.gather(reg_pred, pos_inds)) 
                         alpha_loss_j = self.alpha_loss(pos_alpha_score, targets_alpha_cls)
+                        alpha_loss_j = tf.reshape(alpha_loss_j, pos_alpha_score.shape)
                         loss_j = tf.concat([reg_loss_j, alpha_loss_j], axis=1) * self.regression_weight #[N, 13]
                         # reg_loss.append(loss_j.mean(dim=0)) #[13]
                         reg_loss.append(tf.reduce_mean(loss_j, axis=0))
@@ -534,9 +591,12 @@ class AnchorBasedDetection3DHead(layers.Layer):
                 number_of_positives.append(bbox_annotation.shape[0])
 
             if len(neg_inds) > 0:
-                labels[neg_inds, :] = 0
+                inds = tf.reshape(neg_inds, (-1, 1))
+                updates = tf.zeros((neg_inds.shape[0], labels.shape[1]), dtype=inds.dtype)
+                labels = tf.tensor_scatter_nd_update(labels, inds, updates)
+                # labels[neg_inds, :] = 0
             
-            cls_loss.append(self.loss_cls(cls_score, labels).sum() / (len(pos_inds) + len(neg_inds)))
+            cls_loss.append(tf.reduce_sum(self.loss_cls(cls_score, labels)) / (pos_inds.shape[0] + neg_inds.shape[0]))
         
         # weights = reg_pred.new(number_of_positives).unsqueeze(1) #[B, 1]
         weights = tf.expand_dims(tf.constant(number_of_positives, dtype=reg_pred.dtype), axis=1)
@@ -547,7 +607,10 @@ class AnchorBasedDetection3DHead(layers.Layer):
 
         # weighted_regression_losses = torch.sum(weights * reg_loss / (torch.sum(weights) + 1e-6), dim=0)
         # reg_loss = weighted_regression_losses.mean(dim=0, keepdim=True)
-        weighted_regression_losses = tf.reduce_sum(weights * reg_loss / tf.reduce_all(weights) + 1e-6, axis=0)
+        weighted_regression_losses = tf.reduce_sum(
+            weights * reg_loss / (tf.reduce_sum(weights) + 1e-6),
+            axis=0
+        )
         reg_loss = tf.reduce_mean(weighted_regression_losses, axis=0, keepdims=True)
 
         return cls_loss, reg_loss, dict(cls_loss=cls_loss, reg_loss=reg_loss, total_loss=cls_loss + reg_loss)
