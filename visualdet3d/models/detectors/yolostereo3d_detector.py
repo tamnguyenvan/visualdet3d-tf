@@ -52,9 +52,8 @@ class Stereo3D(keras.Model):
     
     def test_step(self, x):
         left_images, right_images, annotations, P2, P3, disparity = x
-        assert left_images.shape[0] == 1 # we recommmend image batch size = 1 for testing
 
-        output_dict = self.core(tf.concat([left_images, right_images], axis=1))
+        output_dict = self.core(tf.concat([left_images, right_images], axis=-1))
         depth_output   = output_dict['depth_output']
 
         cls_preds, reg_preds = self.bbox_head(
