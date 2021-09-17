@@ -53,7 +53,8 @@ class Stereo3D(keras.Model):
     def test_step(self, x):
         left_images, right_images, annotations, P2, P3, disparity = x
 
-        output_dict = self.core(tf.concat([left_images, right_images], axis=-1))
+        output_dict = self.core(tf.concat([left_images, right_images], axis=-1),
+                                training=False)
         depth_output   = output_dict['depth_output']
 
         cls_preds, reg_preds = self.bbox_head(
@@ -61,7 +62,8 @@ class Stereo3D(keras.Model):
                 features=output_dict['features'],
                 P2=P2,
                 image=left_images
-            )
+            ),
+            training=False
         )
 
         anchors = self.bbox_head.get_anchor(left_images, P2)
