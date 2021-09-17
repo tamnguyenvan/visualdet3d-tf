@@ -63,8 +63,8 @@ class CostVolumePyramid(layers.Layer):
 
 
 class StereoMerging(layers.Layer):
-    def __init__(self, base_features):
-        super(StereoMerging, self).__init__()
+    def __init__(self, base_features, name=None):
+        super(StereoMerging, self).__init__(name=name)
         self.cost_volume_0 = PSMCosineLayer(downsample_scale=4, max_disp=96)
         psv_depth_0 = self.cost_volume_0.depth_channel
         
@@ -92,19 +92,21 @@ class YOLOStereo3DCore(keras.Model):
         Similar to YoloMono3D,
         Left and Right image are fed into the backbone in batch. So they will affect each other with BatchNorm2d.
     """
-    def __init__(self, backbone_arguments):
-        super(YOLOStereo3DCore, self).__init__()
-        self.backbone = ResNet(**backbone_arguments)
+    def __init__(self, backbone_arguments, name=None):
+        super(YOLOStereo3DCore, self).__init__(name=name)
+        self.backbone = ResNet(name='resnet', **backbone_arguments)
 
         base_features = 256 if backbone_arguments['depth'] > 34 else 64
-        self.neck = StereoMerging(base_features)
+        self.neck = StereoMerging(base_features, name='stereo_merging')
     
     def call(self, images):
         batch_size = images.shape[0]
         left_images = images[:, :, :, 0:3]
         right_images = images[:, :, :, 3:]
         
-        images = tf.concat([left_images, right_images], axis=0)
+        images = tf.concat([left_images, right_images],
+                           axis=0,
+                           name='input_concat')
         features = self.backbone(images)
 
         left_features = [feature[0:batch_size] for feature in features]

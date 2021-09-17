@@ -133,7 +133,8 @@ def ResNet(depth,
            num_stages=3,
            out_indices=[0, 1, 2],
            norm_eval=True,
-           dilations=[1, 1, 1]):
+           dilations=[1, 1, 1],
+           name=None):
     """
     """
     kwargs = {
@@ -145,16 +146,16 @@ def ResNet(depth,
         'dilations': dilations,
     }
     if depth == 18:
-        model = ResNetBase(BasicBlock, [2, 2, 2, 2], **kwargs)
+        model = ResNetBase(BasicBlock, [2, 2, 2, 2], name=name, **kwargs)
         model.build([1, *input_shape])
     elif depth == 34:
-        model = ResNetBase(BasicBlock, [3, 4, 6, 3], **kwargs)
+        model = ResNetBase(BasicBlock, [3, 4, 6, 3], name=name, **kwargs)
         model.build([1, *input_shape])
     elif depth == 50:
-        model = ResNetBase(Bottleneck, [3, 4, 23, 3], **kwargs)
+        model = ResNetBase(Bottleneck, [3, 4, 23, 3], name=name, **kwargs)
         model.build([1, *input_shape])
     elif depth == 152:
-        model = ResNetBase(Bottleneck, [3, 8, 36, 3], **kwargs)
+        model = ResNetBase(Bottleneck, [3, 8, 36, 3], name=name, **kwargs)
         model.build([1, *input_shape])
     else:
         raise NotImplementedError(f'Invalid depth: {depth}')
