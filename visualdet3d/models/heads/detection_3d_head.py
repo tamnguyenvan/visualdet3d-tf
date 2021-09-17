@@ -24,8 +24,9 @@ class AnchorBasedDetection3DHead(layers.Layer):
                  layer_cfg: edict=edict(),
                  loss_cfg: edict=edict(),
                  test_cfg: edict=edict(),
-                 read_precompute_anchor:bool=True):
-        super(AnchorBasedDetection3DHead, self).__init__()
+                 read_precompute_anchor:bool=True,
+                 name=None):
+        super(AnchorBasedDetection3DHead, self).__init__(name=name)
         self.anchors = Anchors(preprocessed_path=preprocessed_path,
                                read_config_file=read_precompute_anchor,
                                **anchors_cfg)

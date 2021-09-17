@@ -16,10 +16,10 @@ class Stereo3D(keras.Model):
         self.build_core(detector_cfg)
     
     def build_core(self, detector_cfg):
-        self.core = YOLOStereo3DCore(detector_cfg.backbone)
+        self.core = YOLOStereo3DCore(detector_cfg.backbone, name='core')
     
     def build_head(self, detector_cfg):
-        self.bbox_head = StereoHead(**(detector_cfg.head))
+        self.bbox_head = StereoHead(name='head', **(detector_cfg.head))
         self.disparity_loss = losses.DisparityLoss(maxdisp=96)
     
     def train_step(self, x):
