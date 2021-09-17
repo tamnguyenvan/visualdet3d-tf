@@ -12,10 +12,9 @@ from visualdet3d.utils import alpha_to_theta_3d
 
 def get_num_parameters(model):
     """Count number of trained parameters of the model"""
-    if hasattr(model, 'module'):
-        num_parameters = sum(p.numel() for p in model.module.parameters() if p.requires_grad)
-    else:
-        num_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    num_parameters = 0
+    for var in model.trainable_variables():
+        num_parameters += tf.size(var)
 
     return num_parameters
 

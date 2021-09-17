@@ -2,44 +2,15 @@ import os
 import argparse
 
 import numpy as np
+import tensorflow as tf
 from visualdet3d.data.kitti.stereo_dataset import KittiStereoDataset
 from visualdet3d.models.detectors import get_detector
 from visualdet3d.optim.optimizers import get_optimizer
 from visualdet3d.optim.schedulers import get_scheduler
+from visualdet3d.models.pipelines.trainer import train_stereo_detection
+from visualdet3d.models.utils import get_num_parameters
 from configs import load_config
 
-
-import tensorflow as tf
-from visualdet3d.utils import compound_annotation
-
-
-def train_stereo_detection(data,
-                           model,
-                           optimizer,
-                           global_step=None,
-                           epoch_num=None,
-                           cfg=None):
-    """
-    """
-    left_images, right_images, P2, P3, labels, bbox2d, bbox_3d, disparity = data
-    max_length = np.max([len(label) for label in labels])
-    if max_length == 0:
-        return
-
-    annotation = compound_annotation(labels, max_length, bbox2d, bbox_3d, cfg.classes)  #np.arraym, [batch, max_length, 4 + 1 + 7]
-    cls_loss, reg_loss, loss_dict = model(
-        [left_images, right_images, annotation, P2, P3, disparity]
-    )
-    num_params = 0
-    for var in model.trainable_variables:
-        num_params += tf.reduce_prod(tf.shape(var))
-    print('Trainable params: {}M'.format(num_params.numpy()/1e6))
-
-    cls_loss = tf.reduce_mean(cls_loss)
-    reg_loss = tf.reduce_mean(reg_loss)
-    
-    loss = cls_loss + reg_loss
-    return loss
 
 
 def main():
@@ -52,11 +23,12 @@ def main():
 
     # Build model
     model = get_detector(cfg)
-    # model.summary()
+    # num_params = get_num_parameters(model)
+    # print(f'Number of trainable parameters: {num_params//1e6}M')
 
     # Build optimizer and scheduler
-    optimizer = get_optimizer(cfg)
     lr_scheduler = get_scheduler(cfg)
+    optimizer = get_optimizer(lr_scheduler, cfg)
 
     # Train
     for epoch in range(cfg.trainer.max_epochs):

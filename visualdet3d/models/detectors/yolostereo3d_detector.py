@@ -1,6 +1,5 @@
 import tensorflow as tf
 from tensorflow import keras
-from tensorflow.keras import layers
 
 from visualdet3d.models.detectors.yolostereo3d_core import YOLOStereo3DCore
 from visualdet3d.models.heads.detection_3d_head import StereoHead

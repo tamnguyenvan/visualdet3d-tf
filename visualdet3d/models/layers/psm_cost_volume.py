@@ -38,7 +38,7 @@ class CostVolume(layers.Layer):
             left_features.shape[2],
             self.depth_channel,
             left_features.shape[-1] * 2,
-        ]))
+        ]), trainable=False)
 
         for i in range(self.depth_channel):
             if i > 0:
@@ -60,14 +60,13 @@ class PSMCosineLayer(layers.Layer):
         self.downsample_scale = downsample_scale
         self.depth_channel = int(self.max_disp / self.downsample_scale)
 
-    
     def call(self, left_features, right_features):
         cost = tf.Variable(tf.zeros([
             left_features.shape[0],
             left_features.shape[1],
             left_features.shape[2],
             self.depth_channel,
-        ]))
+        ]), trainable=False)
 
         for i in range(self.depth_channel):
             if i > 0:
