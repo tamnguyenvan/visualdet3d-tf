@@ -4,4 +4,5 @@ numba
 pyyaml
 easydict
 scikit-image
+tqdm
 git+https://github.com/smallsunsun1/addons.git@feature/deformable_ops

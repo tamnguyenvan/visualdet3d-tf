@@ -2,8 +2,10 @@ import numpy as np
 
 import tensorflow as tf
 from visualdet3d.utils import compound_annotation
+from visualdet3d.models.utils.registry import PIPELINE_DICT
 
 
+@PIPELINE_DICT.register_module
 def train_stereo_detection(data,
                            model,
                            optimizer,
@@ -28,6 +30,6 @@ def train_stereo_detection(data,
         
         loss = cls_loss + reg_loss
     
-    grads = tape.gradient(loss, model.trainable_variables)
+    grads = tape.gradient(loss, model.trainable_variables, unconnected_gradients=tf.UnconnectedGradients.ZERO)
     optimizer.apply_gradients(zip(grads, model.trainable_variables))
     return loss

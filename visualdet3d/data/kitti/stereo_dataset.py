@@ -12,8 +12,10 @@ import tensorflow as tf
 from visualdet3d.data.pipeline.transforms import get_transform
 from visualdet3d.data.kitti.preprocessing import KittiObj
 from visualdet3d.models.utils import BBox3dProjector
+from visualdet3d.models.utils.registry import DATASET_DICT
 
 
+@DATASET_DICT.register_module
 class KittiStereoDataset(tf.keras.utils.Sequence):
     """Kitti Stereo Dataset"""
     def __init__(self, cfg, split='training'):
@@ -174,6 +176,7 @@ class KittiStereoDataset(tf.keras.utils.Sequence):
         return self.collate_fn(inputs_list)
 
 
+@DATASET_DICT.register_module
 class KittiStereoTestDataset:
     def __init__(self, config, split='test'):
         pass

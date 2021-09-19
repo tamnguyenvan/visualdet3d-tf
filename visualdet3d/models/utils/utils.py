@@ -1,8 +1,5 @@
 """
 """
-from typing import Union
-# import torch
-# import torch.nn as nn
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras import layers

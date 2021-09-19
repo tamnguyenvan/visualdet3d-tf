@@ -127,7 +127,7 @@ class ResNetBase(keras.Model):
 
 
 def ResNet(depth,
-           input_shape=(224, 224, 3),
+           input_shape=(288, 1280, 3),
            pretrained=True,
            frozen_stages=-1,
            num_stages=3,

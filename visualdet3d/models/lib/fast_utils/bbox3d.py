@@ -3,7 +3,7 @@ import numpy as np
 
 
 @jit
-def convertAlpha2Rot(alpha, z3d, x3d):
+def alpha_to_rot(alpha, z3d, x3d):
     ry3d = alpha + np.arctan2(-z3d, x3d) + 0.5 * np.pi
     ry3d[np.where(ry3d > np.pi)] -= 2 * np.pi
     ry3d[np.where(ry3d <= -np.pi)] += 2 * np.pi
@@ -11,7 +11,7 @@ def convertAlpha2Rot(alpha, z3d, x3d):
 
 
 @jit
-def convertRot2Alpha(ry3d, z3d, x3d):
+def rot_to_alpha(ry3d, z3d, x3d):
 
     alpha = ry3d - np.arctan2(-z3d, x3d) - 0.5 * np.pi
     alpha[alpha > np.pi] -= 2 * np.pi

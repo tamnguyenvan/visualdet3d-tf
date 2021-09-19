@@ -1,6 +1,6 @@
 classes: ['Car', 'Pedestrian']
 data:
-  batch_size: 4
+  batch_size: 1
   num_workers: 4
   rgb_shape: [288, 1280, 3]
   train_dataset: "KittiStereoDataset"
@@ -102,6 +102,9 @@ trainer:
   disp_iter: 100
   save_iter: 5
   test_iter: 10
+  training_func: train_stereo_detection
+  test_func: test_stereo_detection
+  evaluate_func: evaluate_kitti_obj
 
 optimizer:
   name: adam

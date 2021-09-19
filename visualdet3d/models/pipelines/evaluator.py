@@ -12,8 +12,10 @@ from visualdet3d.evaluator.kitti.evaluate import evaluate
 from visualdet3d.evaluator.kitti_depth_prediction.evaluate_depth import evaluate_depth
 from visualdet3d.models.utils import BBox3dProjector, BackProjection
 from visualdet3d.data.kitti.utils import write_result_to_file
+from visualdet3d.models.utils.registry import PIPELINE_DICT
 
 
+@PIPELINE_DICT.register_module
 def evaluate_kitti_depth(cfg: edict,
                          model: tf.keras.Model,
                          dataset_val: Sequence,
@@ -58,6 +60,7 @@ def evaluate_kitti_depth(cfg: edict,
     # print()
 
 
+@PIPELINE_DICT.register_module
 def evaluate_kitti_obj(cfg: edict, 
                        model: tf.keras.Model,
                        dataset_val: Sized,

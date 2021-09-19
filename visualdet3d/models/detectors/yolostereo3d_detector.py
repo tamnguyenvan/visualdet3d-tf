@@ -4,8 +4,10 @@ from tensorflow import keras
 from visualdet3d.models.detectors.yolostereo3d_core import YOLOStereo3DCore
 from visualdet3d.models.heads.detection_3d_head import StereoHead
 from visualdet3d.models.heads import losses
+from visualdet3d.models.utils.registry import DETECTOR_DICT
 
 
+@DETECTOR_DICT.register_module
 class Stereo3D(keras.Model):
     def __init__(self, detector_cfg):
         super(Stereo3D, self).__init__()

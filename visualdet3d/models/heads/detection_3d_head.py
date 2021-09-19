@@ -517,7 +517,6 @@ class AnchorBasedDetection3DHead(layers.Layer):
 
             if len(bbox_annotation) == 0:
                 cls_loss.append(tf.constant(0., dtype=tf.float32))
-                # reg_loss.append(reg_preds.new_zeros(self.num_regression_loss_terms))
                 reg_loss.append(tf.zeros(self.num_regression_loss_terms, dtype=tf.float32))
                 number_of_positives.append(0)
                 continue
@@ -526,9 +525,6 @@ class AnchorBasedDetection3DHead(layers.Layer):
             sampling_result_dict    = self._sample(assignement_result_dict, anchor_j, bbox_annotation)
         
             num_valid_anchors = anchor_j.shape[0]
-            # labels = anchor_j.new_full((num_valid_anchors, self.num_classes),
-            #                         -1, # -1 not computed, binary for each class
-            #                         dtype=torch.float)
             labels = tf.fill(
                 (num_valid_anchors, self.num_classes),
                 -1,
@@ -562,16 +558,12 @@ class AnchorBasedDetection3DHead(layers.Layer):
                     inds = tf.reshape(pos_inds, (-1, 1))
                     updates = tf.zeros((inds.shape[0], labels.shape[1]), dtype=labels.dtype)
                     labels = tf.tensor_scatter_nd_update(labels, inds, updates)
-                    # labels[pos_inds, :] = 0
                     inds = tf.stack([pos_inds, label_index], axis=1)
                     updates = tf.ones(inds.shape[0], dtype=labels.dtype)
                     labels = tf.tensor_scatter_nd_update(labels, inds, updates)
-                    # labels[pos_inds, label_index] = 1
 
                     pos_anchor = tf.gather(anchor, pos_inds)
                     pos_alpha_score = tf.gather(alpha_score, pos_inds)
-                    # pos_anchor = anchor[pos_inds]
-                    # pos_alpha_score = alpha_score[pos_inds]
                     if self.decode_before_loss:
                         # TODO: What is ``anchors_3d_mean_std`?
                         # pos_prediction_decoded = self._decode(pos_anchor, reg_pred[pos_inds],  anchors_3d_mean_std, label_index, pos_alpha_score)
@@ -581,10 +573,9 @@ class AnchorBasedDetection3DHead(layers.Layer):
                         pass
                     else:
                         reg_loss_j = self.loss_bbox(pos_bbox_targets, tf.gather(reg_pred, pos_inds)) 
-                        alpha_loss_j = self.alpha_loss(pos_alpha_score, targets_alpha_cls)
+                        alpha_loss_j = self.alpha_loss(targets_alpha_cls, pos_alpha_score)
                         alpha_loss_j = tf.reshape(alpha_loss_j, pos_alpha_score.shape)
                         loss_j = tf.concat([reg_loss_j, alpha_loss_j], axis=1) * self.regression_weight #[N, 13]
-                        # reg_loss.append(loss_j.mean(dim=0)) #[13]
                         reg_loss.append(tf.reduce_mean(loss_j, axis=0))
                         number_of_positives.append(bbox_annotation.shape[0])
             else:
@@ -595,19 +586,13 @@ class AnchorBasedDetection3DHead(layers.Layer):
                 inds = tf.reshape(neg_inds, (-1, 1))
                 updates = tf.zeros((neg_inds.shape[0], labels.shape[1]), dtype=inds.dtype)
                 labels = tf.tensor_scatter_nd_update(labels, inds, updates)
-                # labels[neg_inds, :] = 0
             
             cls_loss.append(tf.reduce_sum(self.loss_cls(cls_score, labels)) / (pos_inds.shape[0] + neg_inds.shape[0]))
         
-        # weights = reg_pred.new(number_of_positives).unsqueeze(1) #[B, 1]
         weights = tf.expand_dims(tf.constant(number_of_positives, dtype=reg_pred.dtype), axis=1)
-        # cls_loss = torch.stack(cls_loss).mean(dim=0, keepdim=True)
-        # reg_loss = torch.stack(reg_loss, dim=0) #[B, 12]
         cls_loss = tf.reduce_mean(tf.stack(cls_loss), axis=0, keepdims=True)
         reg_loss = tf.stack(reg_loss, axis=0)
 
-        # weighted_regression_losses = torch.sum(weights * reg_loss / (torch.sum(weights) + 1e-6), dim=0)
-        # reg_loss = weighted_regression_losses.mean(dim=0, keepdim=True)
         weighted_regression_losses = tf.reduce_sum(
             weights * reg_loss / (tf.reduce_sum(weights) + 1e-6),
             axis=0

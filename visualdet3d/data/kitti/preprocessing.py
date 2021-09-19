@@ -1,7 +1,5 @@
 import os
-import math
 import numpy as np
-from numpy.linalg import inv
 from .utils import (
     read_image,
     read_pc_from_bin,
