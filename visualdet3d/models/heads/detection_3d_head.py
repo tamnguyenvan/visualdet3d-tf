@@ -1,8 +1,11 @@
+import math
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
 from easydict import EasyDict as edict
+from tensorflow.python.keras import initializers
+from tensorflow.python.keras.layers.convolutional import ZeroPadding2D
 
 from visualdet3d.models.heads.losses import SigmoidFocalLoss, ModifiedSmoothL1Loss
 from visualdet3d.models.heads.anchors import Anchors
@@ -64,15 +67,6 @@ class AnchorBasedDetection3DHead(layers.Layer):
             conv3x3(num_anchors*num_cls_output, padding=1),
             AnchorFlatten(num_cls_output),
 
-            # nn.Conv2d(num_features_in, cls_feature_size, kernel_size=3, padding=1),
-            # nn.Dropout2d(0.3),
-            # nn.ReLU(inplace=True),
-            # nn.Conv2d(cls_feature_size, cls_feature_size, kernel_size=3, padding=1),
-            # nn.Dropout2d(0.3),
-            # nn.ReLU(inplace=True),
-
-            # nn.Conv2d(cls_feature_size, num_anchors*(num_cls_output), kernel_size=3, padding=1),
-            # AnchorFlatten(num_cls_output)
         ])
         # self.cls_feature_extraction[-2].weight.data.fill_(0)
         # self.cls_feature_extraction[-2].bias.data.fill_(0)
@@ -88,15 +82,6 @@ class AnchorBasedDetection3DHead(layers.Layer):
             
             conv3x3(num_anchors*num_reg_output, padding=1),
             AnchorFlatten(num_reg_output),
-            # ModulatedDeformConvPack(num_features_in, reg_feature_size, 3, padding=1),
-            # nn.BatchNorm2d(reg_feature_size),
-            # nn.ReLU(inplace=True),
-            # nn.Conv2d(reg_feature_size, reg_feature_size, kernel_size=3, padding=1),
-            # nn.BatchNorm2d(reg_feature_size),
-            # nn.ReLU(inplace=True),
-
-            # nn.Conv2d(reg_feature_size, num_anchors*num_reg_output, kernel_size=3, padding=1),
-            # AnchorFlatten(num_reg_output)
         ])
 
         # TODO:
@@ -126,7 +111,6 @@ class AnchorBasedDetection3DHead(layers.Layer):
                                        [1 for _ in range(self.num_regression_loss_terms)]) #default 12 only use in 3D
         self.regression_weight = tf.constant(regression_weight, dtype=tf.float32)
 
-        # self.alpha_loss = nn.BCEWithLogitsLoss(reduction='none')
         self.alpha_loss = keras.losses.BinaryCrossentropy(
             from_logits=True,
             reduction=tf.keras.losses.Reduction.NONE
@@ -145,23 +129,11 @@ class AnchorBasedDetection3DHead(layers.Layer):
         """
         N = anchor.shape[0]
         num_gt = annotation.shape[0]
-        # assigned_gt_inds = anchor.new_full(
-        #     (N, ),
-        #     -1, dtype=torch.long
-        # ) #[N, ] torch.long
         assigned_gt_inds = tf.fill((N,), -1)
-        # max_overlaps = anchor.new_zeros((N, ))
         max_overlaps = tf.zeros((N,), dtype=anchor.dtype)
-        # assigned_labels = anchor.new_full((N, ),
-        #     -1,
-        #     dtype=torch.long)
         assigned_labels = tf.fill((N,), -1)
 
         if num_gt == 0:
-            # assigned_gt_inds = anchor.new_full(
-            #     (N, ),
-            #     0, dtype=torch.long
-            # ) #[N, ] torch.long
             assigned_gt_inds = tf.fill((N,), 0)
             return_dict = dict(
                 num_gt=num_gt,
@@ -174,12 +146,10 @@ class AnchorBasedDetection3DHead(layers.Layer):
         IoU = calc_iou(anchor, annotation[:, :4]) # num_anchors x num_annotations
 
         # max for anchor
-        # max_overlaps, argmax_overlaps = IoU.max(dim=1) # num_anchors
         max_overlaps = tf.reduce_max(IoU, axis=1)
         argmax_overlaps = tf.argmax(IoU, axis=1)
 
         # max for gt
-        # gt_max_overlaps, gt_argmax_overlaps = IoU.max(dim=0) #num_gt
         gt_max_overlaps = tf.reduce_max(IoU, axis=0)
         gt_argmax_overlaps = tf.argmax(IoU, axis=0)
 
@@ -187,14 +157,12 @@ class AnchorBasedDetection3DHead(layers.Layer):
         indices = tf.where((max_overlaps >=0) & (max_overlaps < bg_iou_threshold))
         updates = tf.zeros(indices.shape[0], dtype=assigned_gt_inds.dtype)
         assigned_gt_inds = tf.tensor_scatter_nd_update(assigned_gt_inds, indices, updates)
-        # assigned_gt_inds[] = 0
 
         # assign positive
         pos_inds = max_overlaps >= fg_iou_threshold
         indices = tf.where(pos_inds)
         updates = tf.cast(argmax_overlaps[pos_inds] + 1, dtype=assigned_gt_inds.dtype)
         assigned_gt_inds = tf.tensor_scatter_nd_update(assigned_gt_inds, indices, updates)
-        # assigned_gt_inds[pos_inds] = argmax_overlaps[pos_inds] + 1
 
         if match_low_quality:
             for i in range(num_gt):
@@ -204,20 +172,13 @@ class AnchorBasedDetection3DHead(layers.Layer):
                         indices = tf.where(max_iou_inds)
                         updates = tf.cast(tf.fill(indices.shape[0], i+1), dtype=assigned_gt_inds.dtype)
                         assigned_gt_inds = tf.tensor_scatter_nd_update(assigned_gt_inds, indices, updates)
-                        # assigned_gt_inds[max_iou_inds] = i+1
                     else:
                         indices = tf.reshape(gt_argmax_overlaps, (-1, 1))
                         updates = tf.cast(tf.fill(indices.shape[0], i+1), dtype=assigned_gt_inds.dtype)
                         assigned_gt_inds = tf.tensor_scatter_nd_update(assigned_gt_inds, indices, updates)
-                        # assigned_gt_inds[gt_argmax_overlaps[i]] = i+1
 
         assigned_labels = tf.cast(tf.fill(N, -1), dtype=assigned_gt_inds.dtype)
-        # assigned_labels = assigned_gt_inds.new_full((N, ), -1)
-        # pos_inds = torch.nonzero(
-        #         assigned_gt_inds > 0, as_tuple=False
-        #     ).squeeze()
         pos_inds = tf.cast(tf.squeeze(tf.where(assigned_gt_inds > 0), axis=1), dtype=tf.int32)
-        # if pos_inds.numel()>0:
         if tf.size(pos_inds) > 0:
             # assigned_labels[pos_inds] = annotation[assigned_gt_inds[pos_inds] - 1, 4].long()
             indices = tf.reshape(pos_inds, (-1, 1))
@@ -307,7 +268,7 @@ class AnchorBasedDetection3DHead(layers.Layer):
         pred_boxes_x2 = pred_ctr_x + 0.5 * pred_w
         pred_boxes_y2 = pred_ctr_y + 0.5 * pred_h
 
-        one_hot_mask = tf.cast(tf.one_hot(label_index, anchors_3d_mean_std.shape[1], tf.bool))
+        one_hot_mask = tf.cast(tf.one_hot(label_index, anchors_3d_mean_std.shape[1]), tf.bool)
         selected_mean_std = anchors_3d_mean_std[one_hot_mask] #[N]
         mask = selected_mean_std[:, 0, 0] > 0
         
@@ -328,7 +289,15 @@ class AnchorBasedDetection3DHead(layers.Layer):
                                     pred_cx1, pred_cy1, pred_z,
                                     pred_w, pred_h, pred_l, pred_alpha], axis=1)
 
-        pred_boxes[alpha_score[:, 0] < 0.5, -1] += np.pi
+        alpha_score_mask = alpha_score[:, 0] < 0.5
+        alpha_score_inds = tf.cast(tf.squeeze(tf.where(alpha_score_mask), 1), tf.int32)
+        inds = tf.stack([
+            alpha_score_inds,
+            tf.fill(alpha_score_inds.shape[0], pred_boxes.shape[-1])
+        ], axis=1)
+        # pred_boxes[alpha_score[:, 0] < 0.5, -1] += np.pi
+        updates = tf.fill(alpha_score_inds.shape[0], tf.constant(math.pi))
+        pred_boxes = tf.tensor_scatter_nd_add(pred_boxes, inds, updates)
 
         return pred_boxes, mask
         
@@ -388,8 +357,8 @@ class AnchorBasedDetection3DHead(layers.Layer):
         for i in range(N):
             if bbox3d_state_3d[i, 2] > 3 and labels[i] == 0:
                 bbox3d[i] = post_opt(
-                    bbox2d[i], bbox3d_state_3d[i], P2s[0].cpu().numpy(),
-                    bbox3d[i, 0].item(), bbox3d[i, 1].item()
+                    bbox2d[i], bbox3d_state_3d[i], P2s[0],
+                    bbox3d[i, 0], bbox3d[i, 1]
                 )
         bboxes = tf.concat([bbox2d, bbox3d], axis=-1)
         return scores, bboxes, labels
@@ -427,7 +396,7 @@ class AnchorBasedDetection3DHead(layers.Layer):
     def get_bboxes(self, cls_scores, reg_preds, anchors, P2s, img_batch=None):
         
         assert cls_scores.shape[0] == 1 # batch == 1
-        cls_scores = cls_scores.sigmoid()
+        cls_scores = tf.math.sigmoid(cls_scores)
 
         cls_score = cls_scores[0][..., 0:self.num_classes]
         alpha_score = cls_scores[0][..., self.num_classes:self.num_classes+1]
@@ -444,18 +413,27 @@ class AnchorBasedDetection3DHead(layers.Layer):
         anchor_mean_std_3d = anchor_mean_std_3d[useful_mask] #[N, K, 2]
 
         score_thr = getattr(self.test_cfg, 'score_thr', 0.5)
-        max_score, label = cls_score.max(dim=-1) 
+        # max_score, label = cls_score.max(dim=-1) 
+        max_score = tf.reduce_max(cls_score, axis=-1)
+        label = tf.argmax(cls_score, axis=-1)
 
         high_score_mask = (max_score > score_thr)
+        high_score_inds = tf.squeeze(tf.where(high_score_mask))
 
-        anchor      = anchor[high_score_mask, :]
-        anchor_mean_std_3d = anchor_mean_std_3d[high_score_mask, :]
-        cls_score   = cls_score[high_score_mask, :]
-        alpha_score = alpha_score[high_score_mask, :]
-        reg_pred    = reg_pred[high_score_mask, :]
-        max_score   = max_score[high_score_mask]
-        label       = label[high_score_mask]
-
+        # anchor      = anchor[high_score_mask, :]
+        # anchor_mean_std_3d = anchor_mean_std_3d[high_score_mask, :]
+        # cls_score   = cls_score[high_score_mask, :]
+        # alpha_score = alpha_score[high_score_mask, :]
+        # reg_pred    = reg_pred[high_score_mask, :]
+        # max_score   = max_score[high_score_mask]
+        # label       = label[high_score_mask]
+        anchor = tf.gather(anchor, high_score_inds)
+        anchor_mean_std_3d = tf.gather(anchor_mean_std_3d, high_score_inds)
+        cls_score = tf.gather(cls_score, high_score_inds)
+        alpha_score = tf.gather(alpha_score, high_score_inds)
+        reg_pred = tf.gather(reg_pred, high_score_inds)
+        max_score = tf.gather(max_score, high_score_inds)
+        label = tf.gather(label, high_score_inds)
 
         bboxes, mask = self._decode(anchor, reg_pred, anchor_mean_std_3d, label, alpha_score)
         if img_batch is not None:
@@ -469,19 +447,23 @@ class AnchorBasedDetection3DHead(layers.Layer):
         if cls_agnostic:
             # keep_inds = nms(bboxes[:, :4], max_score, nms_iou_thr)
             keep_inds = tf.image.non_max_suppression(
-                bboxes[:, :4], max_score, iou_threshold=nms_iou_thr
+                bboxes[:, :4], max_score, max_output_size=200, iou_threshold=nms_iou_thr
             )
         else:
-            max_coordinate = bboxes.max()
-            nms_bbox = bboxes[:, :4] + label.float().unsqueeze() * (max_coordinate)
+            # max_coordinate = bboxes.max()
+            max_coordinate = tf.reduce_max(bboxes)
+            nms_bbox = bboxes[:, :4] + tf.expand_dims(tf.cast(label, tf.float32), 0) * max_coordinate
             # keep_inds = nms(nms_bbox, max_score, nms_iou_thr)
             keep_inds = tf.image.non_max_suppression(
-                nms_bbox, max_score, iou_threshold=nms_iou_thr
+                nms_bbox, max_score, max_output_size=200, iou_threshold=nms_iou_thr
             )
 
-        bboxes      = bboxes[keep_inds]
-        max_score   = max_score[keep_inds]
-        label       = label[keep_inds]
+        # bboxes      = bboxes[keep_inds]
+        # max_score   = max_score[keep_inds]
+        # label       = label[keep_inds]
+        bboxes = tf.gather(bboxes, keep_inds)
+        max_score = tf.gather(max_score, keep_inds)
+        label = tf.gather(label, keep_inds)
 
         is_post_opt = getattr(self.test_cfg, 'post_optimization', False)
         if is_post_opt:
@@ -579,7 +561,7 @@ class AnchorBasedDetection3DHead(layers.Layer):
                         reg_loss.append(tf.reduce_mean(loss_j, axis=0))
                         number_of_positives.append(bbox_annotation.shape[0])
             else:
-                reg_loss.append(reg_preds.new_zeros(self.num_regression_loss_terms))
+                reg_loss.append(tf.zeros(self.num_regression_loss_terms, dtype=reg_preds.dtype))
                 number_of_positives.append(bbox_annotation.shape[0])
 
             if len(neg_inds) > 0:
@@ -604,7 +586,6 @@ class AnchorBasedDetection3DHead(layers.Layer):
 
 class StereoHead(AnchorBasedDetection3DHead):
     def init_layers(self,
-                    # num_features_in,
                     num_anchors:int,
                     num_cls_output:int,
                     num_reg_output:int,
@@ -620,35 +601,20 @@ class StereoHead(AnchorBasedDetection3DHead):
             layers.Dropout(0.3),
             layers.ReLU(),
             
-            conv3x3(num_anchors*num_cls_output, padding=1),
+            conv3x3(num_anchors*num_cls_output,
+                    kernel_initializer=keras.initializers.Zeros(),
+                    bias_initializer=keras.initializers.Zeros(),
+                    padding=1),
             AnchorFlatten(num_cls_output),
-            # nn.Conv2d(num_features_in, cls_feature_size, kernel_size=3, padding=1),
-            # nn.Dropout2d(0.3),
-            # nn.ReLU(inplace=True),
-            # nn.Conv2d(cls_feature_size, cls_feature_size, kernel_size=3, padding=1),
-            # nn.Dropout2d(0.3),
-            # nn.ReLU(inplace=True),
-
-            # nn.Conv2d(cls_feature_size, num_anchors*(num_cls_output), kernel_size=3, padding=1),
-            # AnchorFlatten(num_cls_output)
         ])
-        # TODO:
-        # self.cls_feature_extraction[-2].weight.data.fill_(0)
-        # self.cls_feature_extraction[-2].bias.data.fill_(0)
 
         self.reg_feature_extraction = keras.Sequential([
             conv_bn_relu(reg_feature_size, 3),
             BasicBlock(reg_feature_size),
             layers.ReLU(),
-            conv3x3(num_anchors*num_reg_output, padding=1),
+            conv3x3(num_anchors*num_reg_output,
+                    kernel_initializer=keras.initializers.Zeros(),
+                    bias_initializer=keras.initializers.Zeros(),
+                    padding=1),
             AnchorFlatten(num_reg_output),
-            # ConvBnReLU(num_features_in, reg_feature_size, (3, 3)),
-            # BasicBlock(reg_feature_size, reg_feature_size),
-            # nn.ReLU(),
-            # nn.Conv2d(reg_feature_size, num_anchors*num_reg_output, kernel_size=3, padding=1),
-            # AnchorFlatten(num_reg_output)
         ])
-
-        # TODO:
-        # self.reg_feature_extraction[-2].weight.data.fill_(0)
-        # self.reg_feature_extraction[-2].bias.data.fill_(0)

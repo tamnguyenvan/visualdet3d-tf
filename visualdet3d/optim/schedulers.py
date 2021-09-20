@@ -22,7 +22,7 @@ class PolyLR(LearningRateSchedule):
         decay = (1 - step / float(self.step_size)) ** self.gamma
         lr = self.lr * decay
         if self.verbose:
-            print('Learning rate:', lr)
+            print('Learning rate:', lr.numpy())
         return lr
 
 
@@ -38,7 +38,7 @@ class StepLR(LearningRateSchedule):
     def __call__(self, step):
         lr = self.learning_rate * self.gamma ** (step // self.step_size)
         if self.verbose:
-            print('Learning rate:', lr)
+            print('Learning rate:', lr.numpy())
         return lr
 
 
@@ -54,7 +54,7 @@ class MultiStepLR(LearningRateSchedule):
     def __call__(self, step):
         lr = self.learning_rate * self.gamma ** int(np.digitize(step, self.milestones))
         if self.verbose:
-            print('Learning rate:', lr)
+            print('Learning rate:', lr.numpy())
         return lr
 
 

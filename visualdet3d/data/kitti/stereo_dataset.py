@@ -133,7 +133,8 @@ class KittiStereoDataset(tf.keras.utils.Sequence):
         })
         return output_dict
     
-    def collate_fn(self, batch):
+    @staticmethod
+    def collate_fn(batch):
         left_images = np.array([item['image'][0] for item in batch])  # [batch, H, W, 3]
 
         right_images = np.array([item['image'][1] for item in batch])  # [batch, H, W, 3]
@@ -148,8 +149,8 @@ class KittiStereoDataset(tf.keras.utils.Sequence):
             return (
                 tf.constant(left_images, dtype=tf.float32),
                 tf.constant(right_images, dtype=tf.float32),
-                tf.constant(P2, dtype=tf.float32),
-                tf.constant(P3, dtype=tf.float32),
+                tf.convert_to_tensor(P2, dtype=tf.float32),
+                tf.convert_to_tensor(P3, dtype=tf.float32),
                 label,
                 bbox2ds,
                 bbox3ds
@@ -158,8 +159,8 @@ class KittiStereoDataset(tf.keras.utils.Sequence):
             return (
                 tf.constant(left_images, dtype=tf.float32),
                 tf.constant(right_images, dtype=tf.float32),
-                tf.constant(P2, dtype=tf.float32),
-                tf.constant(P3, dtype=tf.float32),
+                tf.convert_to_tensor(P2, dtype=tf.float32),
+                tf.convert_to_tensor(P3, dtype=tf.float32),
                 label,
                 bbox2ds,
                 bbox3ds,
@@ -177,6 +178,57 @@ class KittiStereoDataset(tf.keras.utils.Sequence):
 
 
 @DATASET_DICT.register_module
-class KittiStereoTestDataset:
-    def __init__(self, config, split='test'):
-        pass
+class KittiStereoTestDataset(KittiStereoDataset):
+    def __init__(self, cfg, split='test'):
+        super(KittiStereoTestDataset, self).__init__(cfg, split)
+
+        preprocessed_path   = cfg.path.preprocessed_path
+        obj_types = cfg.classes
+        aug_cfg = cfg.data.augmentation.test
+        imdb_file_path = os.path.join(preprocessed_path, 'test', 'imdb.pkl')
+        self.imdb = pickle.load(open(imdb_file_path, 'rb'))
+
+        self.output_dict = {
+            'calib': True,
+            'image': True,
+            'image_3': True,
+            'label': False,
+            'velodyne': False,
+        }
+
+    def __getitem__(self, idx):
+        batch_size = self.cfg.data.batch_size
+        inputs_list = []
+        for i in range(idx*batch_size, (idx+1)*batch_size):
+            kitti_data = self.imdb[i]
+            kitti_data.output_dict = self.output_dict
+            calib, left_image, right_image, _, _ = kitti_data.read_data()
+            calib.image_shape = left_image.shape
+
+            transformed_left_image, transformed_right_image, P2, P3 = self.transform(
+                left_image, right_image, deepcopy(calib.P2), deepcopy(calib.P3)
+            )
+
+            output_dict = {
+                'calib': [P2, P3],
+                'image': [transformed_left_image, transformed_right_image],
+                'original_shape': calib.image_shape,
+                'original_P':calib.P2.copy()
+            }
+            inputs_list.append(output_dict)
+        return inputs_list
+    
+    @staticmethod
+    def collate_fn(batch):
+        left_images = np.array([item['image'][0] for item in batch])#[batch, H, W, 3]
+
+        right_images = np.array([item['image'][1] for item in batch])#[batch, H, W, 3]
+
+        P2 = [item['calib'][0] for item in batch]
+        P3 = [item['calib'][1] for item in batch]
+        return (
+            tf.constant(left_images),
+            tf.constant(right_images),
+            P2,
+            P3
+        )

@@ -38,16 +38,20 @@ def main():
         print('Evaluate function not found')
 
     # Train
+    global_step = 0
     for epoch in range(cfg.trainer.max_epochs):
         for idx, data in enumerate(train_loader):
             loss = training_dection(data, model, optimizer, cfg=cfg)
-            print(f'[Epoch {epoch+1:03d} iter {idx+1:04d}] Loss: {loss.numpy():.4f}')
+            global_step += 1
+            if global_step % cfg.trainer.disp_iter == 0:
+                print(f'[Epoch {epoch+1:03d} iter {idx+1:04d}] Loss: {loss.numpy():.4f}')
         
-        if not os.path.isdir(args.save_dir):
-            os.mkdir(args.save_dir)
-        save_path = os.path.join(args.save_dir, 'model.ckpt')
-        model.save_weights(save_path)
-        print(f'Saved model as {save_path}')
+            if global_step % cfg.trainer.save_iter == 0:
+                if not os.path.isdir(args.save_dir):
+                    os.mkdir(args.save_dir)
+                save_path = os.path.join(args.save_dir, 'model.ckpt')
+                model.save_weights(save_path)
+                print(f'Saved model as {save_path}')
 
 
 if __name__ == '__main__':

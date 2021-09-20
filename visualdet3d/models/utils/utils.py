@@ -194,11 +194,21 @@ class ClipBoxes(layers.Layer):
 
         batch_size, num_channels, height, width = img.shape
       
-        boxes[:, 0] = tf.clip_by_value(boxes[:, 0], clip_value_min=0)
-        boxes[:, 1] = tf.clip_by_value(boxes[:, 1], min=0)
+        # boxes[:, 0] = tf.clip_by_value(boxes[:, 0], clip_value_min=0)
+        # boxes[:, 1] = tf.clip_by_value(boxes[:, 1], min=0)
+        boxes = tf.stack([
+            tf.maximum(boxes[:, 0], 0),
+            tf.maximum(boxes[:, 1], 0),
+            tf.minimum(boxes[:, 2], width),
+            tf.minimum(boxes[:, 3], height),
+        ], axis=1)
+        # boxes[:, 0] = tf.maximum(boxes[:, 0], 0)
+        # boxes[:, 1] = tf.maximum(boxes[:, 1], 0)
 
-        boxes[:, 2] = tf.clip_by_value(boxes[:, 2], clip_value_max=width)
-        boxes[:, 3] = tf.clip_by_value(boxes[:, 3], clip_value_max=height)
+        # # boxes[:, 2] = tf.clip_by_value(boxes[:, 2], clip_value_max=width)
+        # # boxes[:, 3] = tf.clip_by_value(boxes[:, 3], clip_value_max=height)
+        # boxes[:, 2] = tf.minimum(boxes[:, 2], width)
+        # boxes[:, 3] = tf.minimum(boxes[:, 3], height)
         return boxes
 
 

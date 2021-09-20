@@ -53,7 +53,7 @@ class Stereo3D(keras.Model):
         return cls_loss, reg_loss, loss_dict
     
     def test_step(self, x):
-        left_images, right_images, annotations, P2, P3, disparity = x
+        left_images, right_images, P2, P3 = x
 
         output_dict = self.core(tf.concat([left_images, right_images], axis=-1),
                                 training=False)

@@ -12,6 +12,8 @@ def conv_bn_relu(filters,
                  stride=1,
                  padding=1,
                  dilation=1,
+                 kernel_initializer=None,
+                 bias_initializer=None,
                  name=None):
     """Convolution + Batch Normalization + ReLU"""
     return keras.Sequential([
@@ -21,6 +23,8 @@ def conv_bn_relu(filters,
                       strides=stride,
                       padding='valid',
                       dilation_rate=dilation,
+                      kernel_initializer=kernel_initializer,
+                      bias_initializer=bias_initializer,
                       use_bias=False),
         layers.BatchNormalization(),
         layers.ReLU(),
@@ -34,6 +38,8 @@ def conv(filters,
          dilation=1,
          groups=1,
          use_bias=False,
+         kernel_initializer=None,
+         bias_initializer=None,
          name=None):
     """Convolution with padding"""
     return keras.Sequential([
@@ -44,6 +50,8 @@ def conv(filters,
                       padding='valid',
                       use_bias=use_bias,
                       groups=groups,
+                      kernel_initializer=kernel_initializer,
+                      bias_initializer=bias_initializer,
                       dilation_rate=dilation)
     ], name=name)
 
@@ -54,6 +62,8 @@ def conv3x3(filters,
             dilation=1,
             groups=1,
             use_bias=False,
+            kernel_initializer=None,
+            bias_initializer=None,
             name=None):
     """3x3 convolution with padding"""
     return conv(filters,
@@ -63,6 +73,8 @@ def conv3x3(filters,
                 dilation=dilation,
                 groups=groups,
                 use_bias=use_bias,
+                kernel_initializer=kernel_initializer,
+                bias_initializer=bias_initializer,
                 name=name)
 
 
@@ -72,6 +84,8 @@ def conv1x1(filters,
             dilation=1,
             groups=1,
             use_bias=False,
+            kernel_initializer=None,
+            bias_initializer=None,
             name=None):
     """1x1 convolution with padding"""
     return conv(filters,
@@ -81,6 +95,8 @@ def conv1x1(filters,
                 dilation=dilation,
                 groups=groups,
                 use_bias=use_bias,
+                kernel_initializer=kernel_initializer,
+                bias_initializer=bias_initializer,
                 name=name)
 
 
@@ -90,6 +106,8 @@ def conv7x7(filters,
             dilation=1,
             groups=1,
             use_bias=False,
+            kernel_initializer=None,
+            bias_initializer=None,
             name=None):
     """7x7 convolution with padding"""
     return conv(filters,
@@ -99,12 +117,16 @@ def conv7x7(filters,
                 dilation=dilation,
                 groups=groups,
                 use_bias=use_bias,
+                kernel_initializer=kernel_initializer,
+                bias_initializer=bias_initializer,
                 name=name)
 
 
 def conv3d_3x3(filters,
                stride=1,
                padding=1,
+               kernel_initializer=None,
+               bias_initializer=None,
                name=None):
     """3D convolution with padding."""
     return keras.Sequential([
@@ -112,5 +134,7 @@ def conv3d_3x3(filters,
         layers.Conv3D(filters,
                       kernel_size=3,
                       strides=stride,
+                      kernel_initializer=kernel_initializer,
+                      bias_initializer=bias_initializer,
                       padding='valid')
     ], name=name)

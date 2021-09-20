@@ -18,4 +18,4 @@ if [[ "$SPLIT" == '' ]]; then
     SPLIT="validation"
 fi
 
-CUDA_VISIBLE_DEVICES=$GPU python3 scripts/eval.py --config=$CONFIG_PATH --gpu=0 --checkpoint_path=$CKPT_PATH --split_to_test=$SPLIT 
+CUDA_VISIBLE_DEVICES=$GPU python3 scripts/eval.py --config=$CONFIG_PATH --gpu=0 --ckpt=$CKPT_PATH --split=$SPLIT 
