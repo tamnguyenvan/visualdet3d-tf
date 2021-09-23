@@ -2,12 +2,10 @@ import os
 import argparse
 import pickle
 
-import tqdm
-
 import context
-from visualdet3d.utils import Timer
-from visualdet3d.data.kitti.preprocessing import KittiData
-from configs import load_config
+from visualdet3d.utils.timer import Timer
+from visualdet3d.data.kitti.kittidata import KittiData
+from configs import load_cfg
 
 
 def read_one_split(cfg,
@@ -20,11 +18,10 @@ def read_one_split(cfg,
     """
     N = len(index_names)
     frames = [None] * N
-    print(f'Start reading {data_split} data')
+    print("start reading {} data".format(data_split))
     timer = Timer()
 
-    for i, index_name in tqdm.tqdm(enumerate(index_names)):
-
+    for i, index_name in enumerate(index_names):
         # read data with dataloader api
         data_frame = KittiData(data_root_dir, index_name, output_dict)
         calib, _, _, _ = data_frame.read_data()
@@ -46,23 +43,22 @@ def read_one_split(cfg,
     
     pkl_file = os.path.join(save_dir, 'imdb.pkl')
     pickle.dump(frames, open(pkl_file, 'wb'))
-    print(f'{data_split} split finished precomputing')
+    print("{} split finished precomputing".format(data_split))
 
 
 def main():
-    cfg = load_config(args.config)
-
-    time_display_inter = 100
-    data_root_dir = args.data_dir
+    cfg = load_cfg(args.config)
+    time_display_inter = 100  # define the inverval displaying time consumed in loop
+    data_root_dir = cfg.path.test_path  # the base directory of training dataset
     calib_path = os.path.join(data_root_dir, 'calib')
     list_calib = os.listdir(calib_path)
     N = len(list_calib)
     # no need for image, could be modified for extended use
     output_dict = {
-        'calib': True,
-        'image': False,
-        'label': False,
-        'velodyne': False,
+        "calib": True,
+        "image": False,
+        "label": False,
+        "velodyne": False,
     }
 
     num_test_file = N
@@ -70,15 +66,12 @@ def main():
     read_one_split(cfg, test_names, data_root_dir, output_dict,
                    'test', time_display_inter)
 
-    print('Done!')
+    print("Preprocessing finished")
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', type=str, help='Path to config file')
-    parser.add_argument('--data-dir', type=str, help='Test data directory')
-    parser.add_argument('--use_point_cloud', action='store_true',
-                        help='Use point cloud')
     args = parser.parse_args()
     print(args)
     main()

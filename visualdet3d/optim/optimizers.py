@@ -9,9 +9,9 @@ def get_optimizer(schedule: tf.keras.optimizers.schedules.LearningRateSchedule,
     if schedule is not None and 'learning_rate' in cfg.optimizer.kwargs:
         del cfg.optimizer.kwargs['learning_rate']
 
-    if cfg.optimizer.name.lower() == 'sgd':
+    if cfg.optimizer.type_name.lower() == 'sgd':
         return tf.keras.optimizers.SGD(schedule, **(cfg.optimizer.kwargs))
-    elif cfg.optimizer.name.lower() == 'adam':
+    elif cfg.optimizer.type_name.lower() == 'adam':
         return tf.keras.optimizers.Adam(schedule, **(cfg.optimizer.kwargs))
     else:
         raise NotImplementedError(cfg.optimizer)

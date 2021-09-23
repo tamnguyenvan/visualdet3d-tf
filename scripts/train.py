@@ -2,15 +2,15 @@ import os
 import argparse
 
 import context
-from visualdet3d.models.utils.registry import AUGMENTATION_DICT, DATASET_DICT, DETECTOR_DICT, PIPELINE_DICT
+from visualdet3d.networks.utils.registry import DATASET_DICT, DETECTOR_DICT, PIPELINE_DICT
 from visualdet3d.optim.optimizers import get_optimizer
 from visualdet3d.optim.schedulers import get_scheduler
-from configs import load_config
+from configs import load_cfg
 
 
 def main():
     # Load config
-    cfg = load_config(args.config)
+    cfg = load_cfg(args.config)
 
     # Create dataset
     train_loader = DATASET_DICT[cfg.data.train_dataset](cfg, split='training')
@@ -29,13 +29,13 @@ def main():
     else:
         raise KeyError
 
-    # Get evaluation pipeline
-    if 'evaluate_func' in cfg.trainer:
-        evaluate_detection = PIPELINE_DICT[cfg.trainer.evaluate_func]
-        print(f'Found evaluate function {cfg.trainer.evaluate_func}')
-    else:
-        evaluate_detection = None
-        print('Evaluate function not found')
+    # # Get evaluation pipeline
+    # if 'evaluate_func' in cfg.trainer:
+    #     evaluate_detection = PIPELINE_DICT[cfg.trainer.evaluate_func]
+    #     print(f'Found evaluate function {cfg.trainer.evaluate_func}')
+    # else:
+    #     evaluate_detection = None
+    #     print('Evaluate function not found')
 
     # Train
     global_step = 0

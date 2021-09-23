@@ -12,4 +12,4 @@ CONFIG_PATH=$1
 IS_PC=$2
 
 
-python3 scripts/disparity_compute.py --config=$CONFIG_PATH --use_point_cloud=$IS_PC
+python3 scripts/disparity_compute.py --config=$CONFIG_PATH

@@ -3,7 +3,7 @@ set -e
 if [[ $2 == "" ]];then
     echo -e "--------------------(Un)Distributed training script------------------"
     echo -e "Three arguments are needed. Usage: \n"
-    echo -e "   ./train.sh <ConfigPath> <GPUS_SEP_BY_COMMA_NO_SPACE [int, int, ...]> <EXPERIMENT_NAME [str]>\n"
+    echo -e "   ./train.sh <ConfigPath> <GPUS_SEP_BY_COMMA_NO_SPACE [int, int, ...]>"
     echo -e "If only one GPU is assigned, we will directly launch train.py,\notherwise we will launch torch.distributed.launch\n"
     echo -e "exiting"
     echo -e "------------------------------------------------------------------"

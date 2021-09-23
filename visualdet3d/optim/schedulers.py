@@ -127,20 +127,20 @@ def get_scheduler(cfg: Union[edict, None]):
     """
     if cfg is None:
         return ExponentialDecay(cfg.optimizer.kwargs.lr)
-    if cfg.scheduler.name.lower() == 'StepLR'.lower():
+    if cfg.scheduler.type_name.lower() == 'StepLR'.lower():
         return StepLR(**(cfg.scheduler.kwargs))
-    if cfg.scheduler.name.lower() == 'MultiStepLR'.lower():
+    if cfg.scheduler.type_name.lower() == 'MultiStepLR'.lower():
         return MultiStepLR(**cfg.scheduler.kwargs)
-    if cfg.scheduler.name.lower() == 'ExponentialLR'.lower():
+    if cfg.scheduler.type_name.lower() == 'ExponentialLR'.lower():
         # return ExponentialLR(optimizer, **cfg.keywords)
         return ExponentialDecay(cfg.optimizer.kwargs.lr)
-    if cfg.scheduler.name.lower() == 'CosineAnnealingLR'.lower():
+    if cfg.scheduler.type_name.lower() == 'CosineAnnealingLR'.lower():
         # return CosineAnnealingLR(optimizer, **cfg.keywords)
         return
-    if cfg.scheduler.name.lower() == 'PolyLR'.lower():
+    if cfg.scheduler.type_name.lower() == 'PolyLR'.lower():
         # return PolyLR(optimizer, **cfg.keywords)
         return 
-    if cfg.scheduler.name.lower() == 'GradualWarmupScheduler'.lower():
+    if cfg.scheduler.type_name.lower() == 'GradualWarmupScheduler'.lower():
         # return GradualWarmupScheduler(optimizer, **cfg.keywords)
         return
     

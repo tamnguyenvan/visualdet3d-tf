@@ -1,31 +1,32 @@
-"""
-"""
 import os
 import argparse
-from typing import List, Dict
-from copy import deepcopy
 
+from typing import List, Dict, Tuple
 import cv2
 import numpy as np
-import skimage.measure
 from tqdm import tqdm
+from copy import deepcopy
+import skimage.measure
 
 import context
-from visualdet3d.data.kitti.preprocessing import KittiData
-from visualdet3d.data.pipeline.transforms import get_transform
+from visualdet3d.data.pipeline import build_augmentator
+from visualdet3d.data.kitti.kittidata import KittiData
 from visualdet3d.data.kitti.utils import generate_dispariy_from_velo
-from configs import load_config
+from visualdet3d.utils.timer import Timer
+from configs import load_cfg
 
 
-def denorm(image, rgb_mean, rgb_std):
-    """Denormalize a image.
-
-    Args:
-        image: np.ndarray normalized [H, W, 3]
-        rgb_mean: np.ndarray [3] among [0, 1] image
-        rgb_std : np.ndarray [3] among [0, 1] image
-    Returns:
-        unnormalized image: np.ndarray (H, W, 3) [0-255] dtype=np.uint8
+def denorm(image: np.ndarray,
+           rgb_mean: np.ndarray,
+           rgb_std: np.ndarray):
+    """
+        Denormalize a image.
+        Args:
+            image: np.ndarray normalized [H, W, 3]
+            rgb_mean: np.ndarray [3] among [0, 1] image
+            rgb_std : np.ndarray [3] among [0, 1] image
+        Returns:
+            unnormalized image: np.ndarray (H, W, 3) [0-255] dtype=np.uint8
     """
     image = image * rgb_std + rgb_mean #
     image[image > 1] = 1
@@ -34,29 +35,33 @@ def denorm(image, rgb_mean, rgb_std):
     return np.array(image, dtype=np.uint8)
 
 
-def load_names(data_dir):
+def process_train_val_file(cfg)-> Tuple[List[str], List[str]]:
     """
     """
-    train_list_file = os.path.join(data_dir, 'training.txt')
-    train_image_indices = []
-    with open(train_list_file) as f:
-        for line in f:
-            train_image_indices.append(line.strip())
-    
-    val_list_file = os.path.join(data_dir, 'validation.txt')
-    val_image_indices = []
-    with open(val_list_file) as f:
-        for line in f:
-            val_image_indices.append(line.strip())
-    return train_image_indices, val_image_indices
+    train_file = cfg.data.train_split_file
+    val_file   = cfg.data.val_split_file
+
+    with open(train_file) as f:
+        train_lines = f.readlines()
+        for i  in range(len(train_lines)):
+            train_lines[i] = train_lines[i].strip()
+
+    with open(val_file) as f:
+        val_lines = f.readlines()
+        for i  in range(len(val_lines)):
+            val_lines[i] = val_lines[i].strip()
+
+    return train_lines, val_lines
 
 
-def compute_dispairity_for_split(cfg,
-                                 index_names: List[str], 
-                                 data_root_dir: str, 
-                                 output_dict: Dict, 
-                                 data_split: str='training', 
-                                 use_point_cloud: bool=True):
+def compute_dispairity_for_split(
+        cfg,
+        index_names:List[str], 
+        data_root_dir:str, 
+        output_dict:Dict, 
+        data_split:str='training', 
+        time_display_inter:int=100, 
+        use_point_cloud:bool=True):
     """
     """
     save_dir = os.path.join(cfg.path.preprocessed_path, data_split)
@@ -70,46 +75,32 @@ def compute_dispairity_for_split(cfg,
     if not use_point_cloud:
         stereo_matcher = cv2.StereoBM_create(192, 25)
 
-    print(f'Reading {data_split} data...')
-    transform = get_transform(cfg.data.augmentation.test)
+    N = len(index_names)
+    frames = [None] * N
+    print("start reading {} data".format(data_split))
+    timer = Timer()
+    preprocess = build_augmentator(cfg.data.test_augmentation)
 
     for i, index_name in tqdm(enumerate(index_names)):
-        # Read data with dataloader api
+        # read data with dataloader api
         data_frame = KittiData(data_root_dir, index_name, output_dict)
         calib, image, right_image, label, velo = data_frame.read_data()
 
         original_image = image.copy()
         baseline = (calib.P2[0, 3] - calib.P3[0, 3]) / calib.P2[0, 0]
-        image, image_3, P2, P3 = transform(original_image, right_image.copy(), p2=deepcopy(calib.P2), p3=deepcopy(calib.P3))
+        image, image_3, P2, P3 = preprocess(original_image, right_image.copy(), p2=deepcopy(calib.P2), p3=deepcopy(calib.P3))
         if use_point_cloud:
-            # Gathering disparity with point cloud back projection
+            ## gathering disparity with point cloud back projection
             disparity_left = generate_dispariy_from_velo(
-                velo[:, 0:3],
-                image.shape[0],
-                image.shape[1],
-                calib.Tr_velo_to_cam,
-                calib.R0_rect,
-                P2,
-                baseline=baseline
-            )
+                velo[:, 0:3], image.shape[0], image.shape[1],
+                calib.Tr_velo_to_cam, calib.R0_rect, P2, baseline=baseline)
             disparity_right = generate_dispariy_from_velo(
-                velo[:, 0:3],
-                image.shape[0],
-                image.shape[1],
-                calib.Tr_velo_to_cam,
-                calib.R0_rect,
-                P3,
-                baseline=baseline
-            )
-
+                velo[:, 0:3], image.shape[0], image.shape[1],
+                calib.Tr_velo_to_cam, calib.R0_rect, P3, baseline=baseline)
         else:
-            # Gathering disparity with stereoBM from opencv
-            left_image  = denorm(image,
-                                 cfg.data.augmentation.rgb_mean,
-                                 cfg.data.augmentation.rgb_std)
-            right_image = denorm(image_3,
-                                 cfg.data.augmentation.rgb_mean,
-                                 cfg.data.augmentation.rgb_std)
+            ## gathering disparity with stereoBM from opencv
+            left_image  = denorm(image, cfg.data.augmentation.rgb_mean, cfg.data.augmentation.rgb_std)
+            right_image = denorm(image_3, cfg.data.augmentation.rgb_mean, cfg.data.augmentation.rgb_std)
             gray_image1 = cv2.cvtColor(left_image, cv2.COLOR_BGR2GRAY)
             gray_image2 = cv2.cvtColor(right_image, cv2.COLOR_BGR2GRAY)
 
@@ -129,43 +120,36 @@ def compute_dispairity_for_split(cfg,
         file_name = os.path.join(disp_dir, "P3%06d.png" % i)
         cv2.imwrite(file_name, disparity_left)
 
-    print(f'{data_split} split finished precomputing disparity')
-    print(f'Saved the results in {disp_dir}')
+    print("{} split finished precomputing disparity".format(data_split))
 
 
 def main():
-    cfg = load_config(args.config)
-    data_dir = args.data_dir
-
+    cfg = load_cfg(args.config)
+    time_display_inter = 100 # define the inverval displaying time consumed in loop
+    data_root_dir = cfg.path.data_path # the base directory of training dataset
+    calib_path = os.path.join(data_root_dir, 'calib') 
+    list_calib = os.listdir(calib_path)
+    N = len(list_calib)
     # no need for image, could be modified for extended use
     output_dict = {
-        'calib': True,
-        'image': True,
-        'image_3' : True,
-        'label': False,
-        'velodyne': args.use_point_cloud,
-    }
+                "calib": True,
+                "image": True,
+                "image_3" : True,
+                "label": False,
+                "velodyne": args.use_point_cloud,
+            }
 
-    train_names, _ = load_names(data_dir)
-    print(f'Loaded {len(train_names)} names')
-
-    data_root_dir = os.path.join(data_dir, 'training')
+    train_names, val_names = process_train_val_file(cfg)
     compute_dispairity_for_split(
-        cfg,
-        train_names,
-        data_root_dir,
-        output_dict,
-        'training',
-        args.use_point_cloud
-    )
+        cfg, train_names, data_root_dir, output_dict,
+        'training', time_display_inter, args.use_point_cloud)
 
-    print("Done!")
+    print("Preprocessing finished")
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', type=str, help='Path to config file')
-    parser.add_argument('--data-dir', type=str, help='Data root directory')
     parser.add_argument('--use_point_cloud', action='store_true',
                         help='Use point cloud')
     args = parser.parse_args()

@@ -1,38 +1,37 @@
-"""
-"""
 import os
-import argparse
 import pickle
+import argparse
 from copy import deepcopy
 
-import tqdm
 import numpy as np
 import tensorflow as tf
 
 import context
-from visualdet3d.models.heads.anchors import Anchors
-from visualdet3d.data.kitti.preprocessing import KittiData
-from visualdet3d.models.utils import calc_iou
-from visualdet3d.utils import Timer
-from visualdet3d.data.pipeline.transforms import get_transform
-from configs import load_config
+from visualdet3d.networks.heads.anchors import Anchors
+from visualdet3d.networks.utils.utils import calc_iou
+from visualdet3d.data.pipeline import build_augmentator
+from visualdet3d.data.kitti.kittidata import KittiData
+from visualdet3d.utils.timer import Timer
+from configs import load_cfg
 
 
-def load_names(data_dir):
+def process_train_val_file(cfg):
     """
     """
-    train_list_file = os.path.join(data_dir, 'training.txt')
-    train_image_indices = []
-    with open(train_list_file) as f:
-        for line in f:
-            train_image_indices.append(line.strip())
-    
-    val_list_file = os.path.join(data_dir, 'validation.txt')
-    val_image_indices = []
-    with open(val_list_file) as f:
-        for line in f:
-            val_image_indices.append(line.strip())
-    return train_image_indices, val_image_indices
+    train_file = cfg.data.train_split_file
+    val_file   = cfg.data.val_split_file
+
+    with open(train_file) as f:
+        train_lines = f.readlines()
+        for i  in range(len(train_lines)):
+            train_lines[i] = train_lines[i].strip()
+
+    with open(val_file) as f:
+        val_lines = f.readlines()
+        for i  in range(len(val_lines)):
+            val_lines[i] = val_lines[i].strip()
+
+    return train_lines, val_lines
 
 
 def read_one_split(cfg,
@@ -43,7 +42,6 @@ def read_one_split(cfg,
                    time_display_inter=100):
     """
     """
-    # Prepare output directories
     save_dir = os.path.join(cfg.path.preprocessed_path, data_split)
     if not os.path.isdir(save_dir):
         os.makedirs(save_dir)
@@ -55,35 +53,34 @@ def read_one_split(cfg,
 
     N = len(index_names)
     frames = [None] * N
-    print(f'Reading {data_split} data')
+    print("start reading {} data".format(data_split))
     timer = Timer()
 
     anchor_prior = getattr(cfg, 'anchor_prior', True)
 
-    total_objects = [0 for _ in range(len(cfg.classes))]
-    total_usable_objects = [0 for _ in range(len(cfg.classes))]
+    total_objects = [0 for _ in range(len(cfg.obj_types))]
+    total_usable_objects = [0 for _ in range(len(cfg.obj_types))]
     if anchor_prior:
         anchor_manager = Anchors(cfg.path.preprocessed_path,
                                  read_config_file=False,
-                                 data_format='channels_first',
                                  **cfg.detector.head.anchors_cfg)
-        preprocess = get_transform(cfg.data.augmentation.test)
-        total_objects = [0 for _ in range(len(cfg.classes))]
-        total_usable_objects = [0 for _ in range(len(cfg.classes))]
+        preprocess = build_augmentator(cfg.data.test_augmentation)
+        total_objects = [0 for _ in range(len(cfg.obj_types))]
+        total_usable_objects = [0 for _ in range(len(cfg.obj_types))]
         
         len_scale = len(anchor_manager.scales)
         len_ratios = len(anchor_manager.ratios)
         len_level = len(anchor_manager.pyramid_levels)
 
-        examine = np.zeros([len(cfg.classes), len_level * len_scale, len_ratios])
-        sums = np.zeros([len(cfg.classes), len_level * len_scale, len_ratios, 3]) 
-        squared = np.zeros([len(cfg.classes), len_level * len_scale, len_ratios, 3], dtype=np.float64)
+        examine = np.zeros([len(cfg.obj_types), len_level * len_scale, len_ratios])
+        sums    = np.zeros([len(cfg.obj_types), len_level * len_scale, len_ratios, 3]) 
+        squared = np.zeros([len(cfg.obj_types), len_level * len_scale, len_ratios, 3], dtype=np.float64)
 
-        uniform_sum_each_type = np.zeros((len(cfg.classes), 6), dtype=np.float64) #[z, sin2a, cos2a, w, h, l]
-        uniform_square_each_type = np.zeros((len(cfg.classes), 6), dtype=np.float64)
+        uniform_sum_each_type = np.zeros((len(cfg.obj_types), 6), dtype=np.float64) #[z, sin2a, cos2a, w, h, l]
+        uniform_square_each_type = np.zeros((len(cfg.obj_types), 6), dtype=np.float64)
 
-    print('Loading data...')
-    for i, index_name in tqdm.tqdm(enumerate(index_names)):
+    for i, index_name in enumerate(index_names):
+
         # read data with dataloader api
         data_frame = KittiData(data_root_dir, index_name, output_dict)
         calib, image, label, velo = data_frame.read_data()
@@ -92,22 +89,22 @@ def read_one_split(cfg,
         max_occlusion = getattr(cfg.data, 'max_occlusion', 2)
         min_z = getattr(cfg.data, 'min_z', 3)
         if data_split == 'training':
-            data_frame.label = [obj for obj in label.data if obj.type in cfg.classes and obj.occluded < max_occlusion and obj.z > min_z]
+            data_frame.label = [obj for obj in label.data if obj.type in cfg.obj_types and obj.occluded < max_occlusion and obj.z > min_z]
             
             if anchor_prior:
-                for j in range(len(cfg.classes)):
-                    total_objects[j] += len([obj for obj in data_frame.label if obj.type==cfg.classes[j]])
+                for j in range(len(cfg.obj_types)):
+                    total_objects[j] += len([obj for obj in data_frame.label if obj.type==cfg.obj_types[j]])
                     data = np.array(
                         [
                             [obj.z, np.sin(2 * obj.alpha), np.cos(2 * obj.alpha), obj.w, obj.h, obj.l] 
-                                for obj in data_frame.label if obj.type==cfg.classes[j]
+                                for obj in data_frame.label if obj.type==cfg.obj_types[j]
                         ]
                     ) #[N, 6]
                     if data.any():
                         uniform_sum_each_type[j, :] += np.sum(data, axis=0)
                         uniform_square_each_type[j, :] += np.sum(data ** 2, axis=0)
         else:
-            data_frame.label = [obj for obj in label.data if obj.type in cfg.classes]
+            data_frame.label = [obj for obj in label.data if obj.type in cfg.obj_types]
         data_frame.calib = calib
         
         if data_split == 'training' and anchor_prior:
@@ -118,46 +115,42 @@ def read_one_split(cfg,
 
             ## Computing statistic for positive anchors
             if len(data_frame.label) > 0:
+                # anchors, _ = anchor_manager(image[np.newaxis].transpose([0,3,1,2]), torch.tensor(P2).reshape([-1, 3, 4]))
                 anchors, _ = anchor_manager(
-                    image[np.newaxis].transpose([0, 3, 1, 2]),
-                    tf.reshape(tf.convert_to_tensor(P2), ([-1, 3, 4]))
+                    image[np.newaxis].transpose(0, 3, 1, 2),
+                    tf.reshape(tf.convert_to_tensor(P2), (-1, 3, 4))
                 )
 
-                for j in range(len(cfg.classes)):
-                    bbox2d = tf.convert_to_tensor(
-                        [[obj.bbox_l, obj.bbox_t, obj.bbox_r, obj.bbox_b] for obj in label if obj.type == cfg.classes[j]])
+                for j in range(len(cfg.obj_types)):
+                    # bbox2d = torch.tensor([[obj.bbox_l, obj.bbox_t, obj.bbox_r, obj.bbox_b] for obj in label if obj.type == cfg.obj_types[j]]).cuda()
+                    bbox2d = tf.constant([[obj.bbox_l, obj.bbox_t, obj.bbox_r, obj.bbox_b] for obj in label if obj.type == cfg.obj_types[j]])
                     if len(bbox2d) < 1:
                         continue
-                    bbox3d = tf.constant([
-                        [obj.x, obj.y, obj.z, np.sin(2 * obj.alpha), np.cos(2 * obj.alpha)]
-                            for obj in label if obj.type == cfg.classes[j]
-                    ])
+                    # bbox3d = torch.tensor([[obj.x, obj.y, obj.z, np.sin(2 * obj.alpha), np.cos(2 * obj.alpha)] for obj in label if obj.type == cfg.obj_types[j]]).cuda()
+                    bbox3d = tf.constant([[obj.x, obj.y, obj.z, np.sin(2 * obj.alpha), np.cos(2 * obj.alpha)] for obj in label if obj.type == cfg.obj_types[j]])
                     
                     usable_anchors = anchors[0]
 
-                    iou = calc_iou(usable_anchors, bbox2d) #[N, K]
+                    IoUs = calc_iou(usable_anchors, bbox2d) #[N, K]
                     # IoU_max, IoU_argmax = torch.max(IoUs, dim=0)
-                    iou_max = tf.reduce_max(iou, axis=0)
-                    # iou_max_anchor, IoU_argmax_anchor = torch.max(iou, dim=1)
-                    iou_max_anchor = tf.reduce_max(iou, axis=1)
-                    iou_argmax_anchor = tf.argmax(iou, axis=1)
+                    # IoU_max_anchor, IoU_argmax_anchor = torch.max(IoUs, dim=1)
+                    IoU_max = tf.reduce_max(IoUs, axis=0)
+                    IoU_argmax = tf.argmax(IoUs, axis=0)
 
-                    num_usable_object = int(tf.squeeze(
-                        tf.reduce_sum(
-                            tf.cast(iou_max > cfg.detector.head.loss_cfg.fg_iou_threshold, tf.int32)
-                        )
-                    ).numpy())
+                    IoU_max_anchor = tf.reduce_max(IoUs, axis=1)
+                    IoU_argmax_anchor = tf.argmax(IoUs, axis=1)
+
+                    num_usable_object = tf.reduce_sum(tf.cast(IoU_max > cfg.detector.head.loss_cfg.fg_iou_threshold, tf.int32))
                     total_usable_objects[j] += num_usable_object
 
-                    positive_anchors_mask = iou_max_anchor > cfg.detector.head.loss_cfg.fg_iou_threshold
-                    # positive_ground_truth_3d = bbox3d[iou_argmax_anchor[positive_anchors_mask]].numpy()
-                    positive_ground_truth_3d = tf.gather_nd(
-                        bbox3d,
-                        indices=tf.reshape(iou_argmax_anchor[positive_anchors_mask], (-1, 1))).numpy()
+                    positive_anchors_mask = IoU_max_anchor > cfg.detector.head.loss_cfg.fg_iou_threshold
+                    # positive_ground_truth_3d = bbox3d[IoU_argmax_anchor[positive_anchors_mask]].cpu().numpy()
+                    positive_ground_truth_3d = tf.gather(bbox3d, IoU_argmax_anchor[positive_anchors_mask]).numpy()
 
+                    # used_anchors = usable_anchors[positive_anchors_mask].cpu().numpy() #[x1, y1, x2, y2]
                     used_anchors = usable_anchors[positive_anchors_mask].numpy() #[x1, y1, x2, y2]
 
-                    sizes_int, ratio_int = anchor_manager.anchors_to_indexes(used_anchors)
+                    sizes_int, ratio_int = anchor_manager.anchors2indexes(used_anchors)
                     for k in range(len(sizes_int)):
                         examine[j, sizes_int[k], ratio_int[k]] += 1
                         sums[j, sizes_int[k], ratio_int[k]] += positive_ground_truth_3d[k, 2:5]
@@ -176,9 +169,9 @@ def read_one_split(cfg,
         os.makedirs(save_dir)
     if data_split == 'training' and anchor_prior:
         
-        for j in range(len(cfg.classes)):
+        for j in range(len(cfg.obj_types)):
             global_mean = uniform_sum_each_type[j] / total_objects[j]
-            global_var = np.sqrt(uniform_square_each_type[j] / total_objects[j] - global_mean ** 2)
+            global_var  = np.sqrt(uniform_square_each_type[j] / total_objects[j] - global_mean ** 2)
 
             avg = sums[j] / (examine[j][:, :, np.newaxis] + 1e-8)
             EX_2 = squared[j] / (examine[j][:, :, np.newaxis] + 1e-8)
@@ -186,10 +179,10 @@ def read_one_split(cfg,
 
             avg[examine[j] < 10, :] = -100  # with such negative mean Z, anchors/losses will filter them out
             std[examine[j] < 10, :] = 1e10
-            avg[np.isnan(std)] = -100
-            std[np.isnan(std)] = 1e10
-            avg[std < 1e-3] = -100
-            std[std < 1e-3] = 1e10
+            avg[np.isnan(std)]      = -100
+            std[np.isnan(std)]      = 1e10
+            avg[std < 1e-3]         = -100
+            std[std < 1e-3]         = 1e10
 
             whl_avg = np.ones([avg.shape[0], avg.shape[1], 3]) * global_mean[3:6]
             whl_std = np.ones([avg.shape[0], avg.shape[1], 3]) * global_var[3:6]
@@ -197,52 +190,49 @@ def read_one_split(cfg,
             avg = np.concatenate([avg, whl_avg], axis=2)
             std = np.concatenate([std, whl_std], axis=2)
 
-            npy_file = os.path.join(save_dir,'anchor_mean_{}.npy'.format(cfg.classes[j]))
+            npy_file = os.path.join(save_dir,'anchor_mean_{}.npy'.format(cfg.obj_types[j]))
             np.save(npy_file, avg)
-            std_file = os.path.join(save_dir,'anchor_std_{}.npy'.format(cfg.classes[j]))
+            print(f'Saved mean as {npy_file}')
+            std_file = os.path.join(save_dir,'anchor_std_{}.npy'.format(cfg.obj_types[j]))
             np.save(std_file, std)
+            print(f'Saved std file as {std_file}')
     pkl_file = os.path.join(save_dir,'imdb.pkl')
     pickle.dump(frames, open(pkl_file, 'wb'))
     print("{} split finished precomputing".format(data_split))
 
 
+
 def main():
-    cfg = load_config(args.config)
-    data_dir = args.data_dir
+    cfg = load_cfg(args.config)
     
     time_display_inter = 100
-
-    # No need for image, could be modified for extended use
+    data_root_dir = cfg.path.data_path
+    calib_path = os.path.join(data_root_dir, 'calib') 
+    list_calib = os.listdir(calib_path)
+    N = len(list_calib)
+    # no need for image, could be modified for extended use
     output_dict = {
-        'calib': True,
-        'image': True,
-        'label': True,
-        'velodyne': False,
+        "calib": True,
+        "image": True,
+        "label": True,
+        "velodyne": False,
     }
 
-    train_names, val_names = load_names(data_dir)
-    print(f'Loaded {len(train_names)} training names')
-    print(f'Loaded {len(val_names)} validation names')
-
-    data_root_dir = os.path.join(data_dir, 'training')
+    train_names, val_names = process_train_val_file(cfg)
     read_one_split(cfg, train_names, data_root_dir, output_dict, 'training', time_display_inter)
     output_dict = {
-        'calib': True,
-        'image': False,
-        'label': True,
-        'velodyne': False,
+        "calib": True,
+        "image": False,
+        "label": True,
+        "velodyne": False,
     }
     read_one_split(cfg, val_names, data_root_dir, output_dict, 'validation', time_display_inter)
 
-    print('Done!')
-
+    print("Preprocessing finished")
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', type=str, help='Path to config file')
-    parser.add_argument('--data-dir', type=str, help='Data root directory')
-    parser.add_argument('--use_point_cloud', action='store_true',
-                        help='Use point cloud')
     args = parser.parse_args()
     print(args)
     main()
