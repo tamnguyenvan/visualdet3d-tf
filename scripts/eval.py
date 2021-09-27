@@ -4,13 +4,13 @@ import argparse
 import tensorflow as tf
 
 import context
-from visualdet3d.models.utils.registry import DETECTOR_DICT, DATASET_DICT, PIPELINE_DICT
-from configs import load_config
+from visualdet3d.networks.utils.registry import DETECTOR_DICT, DATASET_DICT, PIPELINE_DICT
+from configs import load_cfg
 
 
 def main():
     # Read Config
-    cfg = load_config(args.config)
+    cfg = load_cfg(args.config)
     
     # Force GPU selection in command line
     cfg.trainer.gpu = 0

@@ -29,7 +29,7 @@ def train_stereo_detection(data,
         
         loss = cls_loss + reg_loss
     
-    # grads = tape.gradient(loss, model.trainable_variables, unconnected_gradients=tf.UnconnectedGradients.ZERO)
-    grads = tape.gradient(loss, model.trainable_variables)
+    grads = tape.gradient(loss, model.trainable_variables, unconnected_gradients=tf.UnconnectedGradients.ZERO)
+    # grads = tape.gradient(loss, model.trainable_variables)
     optimizer.apply_gradients(zip(grads, model.trainable_variables))
     return loss

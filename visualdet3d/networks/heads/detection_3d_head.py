@@ -3,6 +3,7 @@ import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
 from easydict import EasyDict as edict
+from tensorflow.python.keras import initializers
 
 from visualdet3d.networks.heads.losses import SigmoidFocalLoss, ModifiedSmoothL1Loss
 from visualdet3d.networks.heads.anchors import Anchors
@@ -61,7 +62,10 @@ class AnchorBasedDetection3DHead(layers.Layer):
             layers.Dropout(0.3),
             layers.ReLU(),
             
-            conv3x3(num_anchors*num_cls_output, padding=1),
+            conv3x3(num_anchors*num_cls_output,
+                    padding=1,
+                    kernel_initializer=keras.initializers.Zeros(),
+                    bias_initializer=keras.initializers.Zeros()),
             AnchorFlatten(num_cls_output),
 
         ])
@@ -78,7 +82,10 @@ class AnchorBasedDetection3DHead(layers.Layer):
             layers.BatchNormalization(),
             layers.ReLU(),
             
-            conv3x3(num_anchors*num_reg_output, padding=1),
+            conv3x3(num_anchors*num_reg_output,
+                    padding=1,
+                    kernel_initializer=keras.initializers.Zeros(),
+                    bias_initializer=keras.initializers.Zeros()),
             AnchorFlatten(num_reg_output),
         ])
 
@@ -87,8 +94,11 @@ class AnchorBasedDetection3DHead(layers.Layer):
         # self.reg_feature_extraction[-2].bias.data.fill_(0)
 
     def call(self, inputs):
-        cls_preds = self.cls_feature_extraction(inputs['features'])
-        reg_preds = self.reg_feature_extraction(inputs['features'])
+        with tf.name_scope('cls_feature_extraction'):
+            cls_preds = self.cls_feature_extraction(inputs['features'])
+        
+        with tf.name_scope('reg_feature_extraction'):
+            reg_preds = self.reg_feature_extraction(inputs['features'])
 
         return cls_preds, reg_preds
         

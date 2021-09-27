@@ -9,7 +9,7 @@ cfg.obj_types = ['Car', 'Pedestrian']
 trainer = edict(
     gpu = 0,
     max_epochs = 80, # for validation epoch 50 is enough
-    disp_iter = 100,
+    disp_iter = 1,
     save_iter = 5,
     test_iter = 10,
     training_func = "train_stereo_detection",
@@ -60,22 +60,22 @@ optimizer = edict(
         lr= 1e-4,
         # weight_decay=0,
     ),
-    # clipped_gradient_norm = 0.1
+    clipnorm=0.1
 )
 cfg.optimizer = optimizer
 ## scheduler
 scheduler = edict(
-    type_name='CosineAnnealingLR',
+    type_name='StepLR',
     kwargs=edict(
-        T_max= cfg.trainer.max_epochs,
-        eta_min= 5e-6,
+        step_size=100,
+        verbose=True,
     )
 )
 cfg.scheduler = scheduler
 
 ## data
 data = edict(
-    batch_size = 2,
+    batch_size = 1,
     num_workers = 4,
     rgb_shape = (288, 1280, 3),
     train_dataset = "KittiStereoDataset",

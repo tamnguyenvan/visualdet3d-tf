@@ -44,7 +44,7 @@ def main():
             loss = training_dection(data, model, optimizer, cfg=cfg)
             global_step += 1
             if global_step % cfg.trainer.disp_iter == 0:
-                print(f'[Epoch {epoch+1:03d} iter {idx+1:04d}] Loss: {loss.numpy():.4f}')
+                print(f'[Epoch {epoch+1:03d} iter {global_step:04d}] Loss: {loss.numpy():.4f}')
         
             if global_step % cfg.trainer.save_iter == 0:
                 if not os.path.isdir(args.save_dir):
