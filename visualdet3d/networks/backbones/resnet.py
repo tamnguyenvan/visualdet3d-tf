@@ -163,11 +163,11 @@ def ResNet(depth,
         
 
 if __name__ == '__main__':
-    input_shape = (224, 224, 3)
+    input_shape = (288, 1280, 3)
     model = ResNet(depth=34)
     model.summary()
 
-    dummy_inputs = tf.random.normal((1, 224, 224, 3))
+    dummy_inputs = tf.random.normal((1, 288, 1280, 3))
     outs = model(dummy_inputs)
     for out in outs:
         print(out.shape)

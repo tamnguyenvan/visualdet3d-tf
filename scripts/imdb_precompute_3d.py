@@ -117,7 +117,7 @@ def read_one_split(cfg,
             if len(data_frame.label) > 0:
                 # anchors, _ = anchor_manager(image[np.newaxis].transpose([0,3,1,2]), torch.tensor(P2).reshape([-1, 3, 4]))
                 anchors, _ = anchor_manager(
-                    image[np.newaxis].transpose(0, 3, 1, 2),
+                    image[np.newaxis],
                     tf.reshape(tf.convert_to_tensor(P2), (-1, 3, 4))
                 )
 

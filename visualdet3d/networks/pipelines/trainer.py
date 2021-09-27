@@ -18,7 +18,6 @@ def train_stereo_detection(data,
         return
 
     annotation = compound_annotation(labels, max_length, bbox2d, bbox_3d, cfg.obj_types)  #np.arraym, [batch, max_length, 4 + 1 + 7]
-    import pdb;pdb.set_trace()
     with tf.GradientTape() as tape:
         cls_loss, reg_loss, loss_dict = model(
             [left_images, right_images, annotation, P2, P3, disparity],

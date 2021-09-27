@@ -75,7 +75,7 @@ cfg.scheduler = scheduler
 
 ## data
 data = edict(
-    batch_size = 1,
+    batch_size = 2,
     num_workers = 4,
     rgb_shape = (288, 1280, 3),
     train_dataset = "KittiStereoDataset",
@@ -93,10 +93,10 @@ data.augmentation = edict(
 )
 data.train_augmentation = [
     edict(type_name='ConvertToFloat'),
-    edict(type_name='PhotometricDistort', keywords=edict(distort_prob=1.0, contrast_lower=0.5, contrast_upper=1.5, saturation_lower=0.5, saturation_upper=1.5, hue_delta=18.0, brightness_delta=32)),
+    # edict(type_name='PhotometricDistort', keywords=edict(distort_prob=1.0, contrast_lower=0.5, contrast_upper=1.5, saturation_lower=0.5, saturation_upper=1.5, hue_delta=18.0, brightness_delta=32)),
     edict(type_name='CropTop', keywords=edict(crop_top_index=data.augmentation.crop_top)),
     edict(type_name='Resize', keywords=edict(size=data.augmentation.cropSize)),
-    edict(type_name='RandomMirror', keywords=edict(mirror_prob=0.5)),
+    # edict(type_name='RandomMirror', keywords=edict(mirror_prob=0.5)),
     edict(type_name='Normalize', keywords=edict(mean=data.augmentation.rgb_mean, stds=data.augmentation.rgb_std))
 ]
 data.test_augmentation = [
