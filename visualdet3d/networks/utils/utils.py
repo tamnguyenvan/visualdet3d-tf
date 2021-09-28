@@ -77,7 +77,8 @@ def cornerbbox2xyxy(corner_box):
 
     else:
         raise NotImplementedError
-        
+
+
 def calc_iou(a, b):
     """Calculate Intersection over Union between `a` and `b`.
     
@@ -104,6 +105,7 @@ def calc_iou(a, b):
     intersection = iw * ih
     iou = intersection / ua
     return iou
+
 
 class BBoxTransform(layers.Layer):
     """
@@ -134,7 +136,7 @@ class BBoxTransform(layers.Layer):
         else:
             self.std = std
 
-    def call(self, boxes, deltas,anchors_mean_std=None, label_index=None):
+    def call(self, boxes, deltas, anchors_mean_std=None, label_index=None):
 
         widths  = boxes[..., 2] - boxes[..., 0]
         heights = boxes[..., 3] - boxes[..., 1]
@@ -184,22 +186,23 @@ class BBoxTransform(layers.Layer):
         return pred_boxes
 
 
-class ClipBoxes(layers.Layer):
+class ClipBoxes:
 
     def __init__(self, width=None, height=None):
-        super(ClipBoxes, self).__init__()
+        pass
 
-    def call(self, boxes, img):
+    def __call__(self, boxes, img):
 
-        batch_size, num_channels, height, width = img.shape
+        batch_size, height, width, num_channels = img.shape
       
         # boxes[:, 0] = tf.clip_by_value(boxes[:, 0], clip_value_min=0)
         # boxes[:, 1] = tf.clip_by_value(boxes[:, 1], min=0)
-        boxes = tf.stack([
-            tf.maximum(boxes[:, 0], 0),
-            tf.maximum(boxes[:, 1], 0),
-            tf.minimum(boxes[:, 2], width),
-            tf.minimum(boxes[:, 3], height),
+        boxes = tf.concat([
+            tf.reshape(tf.maximum(boxes[:, 0], 0), (-1, 1)),
+            tf.reshape(tf.maximum(boxes[:, 1], 0), (-1, 1)),
+            tf.reshape(tf.minimum(boxes[:, 2], width), (-1, 1)),
+            tf.reshape(tf.minimum(boxes[:, 3], height), (-1, 1)),
+            boxes[:, 4:]
         ], axis=1)
         # boxes[:, 0] = tf.maximum(boxes[:, 0], 0)
         # boxes[:, 1] = tf.maximum(boxes[:, 1], 0)
@@ -211,7 +214,7 @@ class ClipBoxes(layers.Layer):
         return boxes
 
 
-class BBox3dProjector(layers.Layer):
+class BBox3dProjector:
     """
         forward methods
             input:
@@ -223,7 +226,6 @@ class BBox3dProjector(layers.Layer):
                 [N, ] thetas
     """
     def __init__(self):
-        super(BBox3dProjector, self).__init__()
         self.corner_matrix = tf.constant(
             [[-1, -1, -1],
             [ 1, -1, -1],
@@ -235,7 +237,7 @@ class BBox3dProjector(layers.Layer):
             [-1,  1, -1]]
         , tf.float32)  # 8, 3
 
-    def call(self, bbox_3d, tensor_p2):
+    def __call__(self, bbox_3d, tensor_p2):
         """
             input:
                 unnormalize bbox_3d [N, 7] with  x, y, z, w, h, l, alpha
@@ -269,14 +271,14 @@ class BBox3dProjector(layers.Layer):
         return abs_corners, homo_coord, thetas
 
 
-class BackProjection(layers.Layer):
+class BackProjection:
     """
         forward method:
             bbox3d: [N, 7] homo_x, homo_y, z, w, h, l, alpha
             p2: [3, 4]
             return [x3d, y3d, z, w, h, l, alpha]
     """
-    def call(self, bbox3d, p2):
+    def __call__(self, bbox3d, p2):
         """
             bbox3d: [N, 7] homo_x, homo_y, z, w, h, l, alpha
             p2: [3, 4]

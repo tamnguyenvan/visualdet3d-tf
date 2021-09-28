@@ -179,7 +179,8 @@ def test_one(cfg,
         bbox_3d_state = bbox[:, 4:] #[cx,cy,z,w,h,l,alpha, bot, top]
         bbox_3d_state_3d = backprojector(bbox_3d_state, P2) #[x, y, z, w,h ,l, alpha, bot, top]
 
-        _, _, thetas = projector(bbox_3d_state_3d, bbox_3d_state_3d.new(P2))
+        P2 = tf.cast(P2, dtype=bbox_3d_state_3d.dtype)
+        _, _, thetas = projector(bbox_3d_state_3d, P2)
 
         original_P = data['original_P']
         scale_x = original_P[0, 0] / P2[0, 0]
@@ -193,6 +194,8 @@ def test_one(cfg,
         bbox_2d[:, 0:4:2] *= scale_x
         bbox_2d[:, 1:4:2] *= scale_y
 
+        bbox_3d_state_3d = bbox_3d_state_3d.numpy()
+        thetas = thetas.numpy()
         write_result_to_file(result_path, index, scores, bbox_2d, bbox_3d_state_3d, thetas, obj_names)
     else:
         if 'crop_top' in cfg.data.augmentation and cfg.data.augmentation.crop_top is not None:

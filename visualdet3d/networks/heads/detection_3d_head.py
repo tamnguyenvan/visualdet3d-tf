@@ -301,7 +301,7 @@ class AnchorBasedDetection3DHead(layers.Layer):
         alpha_score_inds = tf.cast(tf.squeeze(tf.where(alpha_score_mask), 1), tf.int32)
         inds = tf.stack([
             alpha_score_inds,
-            tf.fill(alpha_score_inds.shape[0], pred_boxes.shape[-1])
+            tf.fill(alpha_score_inds.shape[0], pred_boxes.shape[-1]-1)
         ], axis=1)
         # pred_boxes[alpha_score[:, 0] < 0.5, -1] += np.pi
         updates = tf.fill(alpha_score_inds.shape[0], tf.constant(math.pi))
