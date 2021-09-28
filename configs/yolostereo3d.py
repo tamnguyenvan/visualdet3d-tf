@@ -10,7 +10,7 @@ trainer = edict(
     gpu = 0,
     max_epochs = 80, # for validation epoch 50 is enough
     disp_iter = 1,
-    save_iter = 5,
+    save_iter = 1000,
     test_iter = 10,
     training_func = "train_stereo_detection",
     test_func = "test_stereo_detection",
@@ -21,8 +21,8 @@ cfg.trainer = trainer
 
 ## path
 path = edict()
-path.data_path = "kitti_small/training" # used in visualDet3D/data/.../dataset
-path.test_path = "kitti_small/testing" # used in visualDet3D/data/.../dataset
+path.data_path = "kitti/training" # used in visualDet3D/data/.../dataset
+path.test_path = "kitti/testing" # used in visualDet3D/data/.../dataset
 path.visualDet3D_path = "visualdet3d" # The path should point to the inner subfolder
 path.project_path = "visualdet3d/workdirs" # or other path for pickle files, checkpoints, tensorboard logging and output files.
 if not os.path.isdir(path.project_path):
@@ -65,9 +65,8 @@ optimizer = edict(
 cfg.optimizer = optimizer
 ## scheduler
 scheduler = edict(
-    type_name='StepLR',
+    type_name='PolyLR',
     kwargs=edict(
-        step_size=100,
         verbose=True,
     )
 )
@@ -75,7 +74,7 @@ cfg.scheduler = scheduler
 
 ## data
 data = edict(
-    batch_size = 1,
+    batch_size = 4,
     num_workers = 4,
     rgb_shape = (288, 1280, 3),
     train_dataset = "KittiStereoDataset",
@@ -93,10 +92,10 @@ data.augmentation = edict(
 )
 data.train_augmentation = [
     edict(type_name='ConvertToFloat'),
-    # edict(type_name='PhotometricDistort', keywords=edict(distort_prob=1.0, contrast_lower=0.5, contrast_upper=1.5, saturation_lower=0.5, saturation_upper=1.5, hue_delta=18.0, brightness_delta=32)),
+    edict(type_name='PhotometricDistort', keywords=edict(distort_prob=1.0, contrast_lower=0.5, contrast_upper=1.5, saturation_lower=0.5, saturation_upper=1.5, hue_delta=18.0, brightness_delta=32)),
     edict(type_name='CropTop', keywords=edict(crop_top_index=data.augmentation.crop_top)),
     edict(type_name='Resize', keywords=edict(size=data.augmentation.cropSize)),
-    # edict(type_name='RandomMirror', keywords=edict(mirror_prob=0.5)),
+    edict(type_name='RandomMirror', keywords=edict(mirror_prob=0.5)),
     edict(type_name='Normalize', keywords=edict(mean=data.augmentation.rgb_mean, stds=data.augmentation.rgb_std))
 ]
 data.test_augmentation = [
