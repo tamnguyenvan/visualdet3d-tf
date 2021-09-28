@@ -94,7 +94,6 @@ def get_scheduler(cfg: Union[edict, None]):
     """
     kwargs = cfg.scheduler.kwargs
     kwargs.update({'learning_rate': cfg.optimizer.kwargs.lr})
-    print(kwargs)
     if cfg is None:
         return ExponentialLR(**kwargs)
     if cfg.scheduler.type_name.lower() == 'StepLR'.lower():

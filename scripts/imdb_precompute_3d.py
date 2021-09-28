@@ -196,6 +196,7 @@ def read_one_split(cfg,
             std_file = os.path.join(save_dir,'anchor_std_{}.npy'.format(cfg.obj_types[j]))
             np.save(std_file, std)
             print(f'Saved std file as {std_file}')
+
     pkl_file = os.path.join(save_dir,'imdb.pkl')
     pickle.dump(frames, open(pkl_file, 'wb'))
     print("{} split finished precomputing".format(data_split))

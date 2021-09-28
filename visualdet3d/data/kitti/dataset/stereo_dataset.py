@@ -85,6 +85,13 @@ class KittiStereoDataset(tf.keras.utils.Sequence):
                 transformed_label[i].bbox_b = bbox2d[i, 3]
         return transformed_label, bbox3d_state
     
+    def one_epoch_end(self):
+        np.random.seed(12)
+        indices = np.arange(len(self.imdb))
+        np.random.shuffle(indices)
+        self.imdb = np.array(self.imdb)[indices].tolist()
+        return self.imdb
+    
     def __len__(self):
         return math.ceil(len(self.imdb) / self.cfg.data.batch_size)
     
@@ -167,11 +174,11 @@ class KittiStereoDataset(tf.keras.utils.Sequence):
                 tf.constant(disparities, dtype=tf.float32),
             )
         
-
     def __getitem__(self, idx):
         batch_size = self.cfg.data.batch_size
         inputs_list = []
-        for i in range(idx*batch_size, (idx+1)*batch_size):
+        end_index = min(len(self.imdb), (idx+1)*batch_size)
+        for i in range(idx*batch_size, end_index):
             sample_input = self._load_single_sample(i)
             inputs_list.append(sample_input)
         return self.collate_fn(inputs_list)
@@ -199,7 +206,8 @@ class KittiStereoTestDataset(KittiStereoDataset):
     def __getitem__(self, idx):
         batch_size = self.cfg.data.batch_size
         inputs_list = []
-        for i in range(idx*batch_size, (idx+1)*batch_size):
+        end_index = min(len(self.imdb), (idx+1)*batch_size)
+        for i in range(idx*batch_size, end_index):
             kitti_data = self.imdb[i]
             kitti_data.output_dict = self.output_dict
             calib, left_image, right_image, _, _ = kitti_data.read_data()

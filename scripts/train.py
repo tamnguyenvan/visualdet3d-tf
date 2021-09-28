@@ -43,6 +43,8 @@ def main():
         for idx, data in enumerate(train_loader):
             loss = training_dection(data, model, optimizer, cfg=cfg)
             global_step += 1
+            if loss is None:  # empty inputs
+                continue
             if global_step % cfg.trainer.disp_iter == 0:
                 print(f'[Epoch {epoch+1:03d} iter {global_step:04d}] Loss: {loss.numpy():.4f}')
         

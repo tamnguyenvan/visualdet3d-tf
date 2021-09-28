@@ -22,6 +22,6 @@ def test_stereo_detection(data,
     scores = scores.numpy()
     bbox = bbox.numpy()
     obj_index = obj_index.numpy()
-    obj_types = [cfg.classes[int(i)] for i in obj_index]
+    obj_types = [cfg.obj_types[int(i)] for i in obj_index]
 
     return scores, bbox, obj_types

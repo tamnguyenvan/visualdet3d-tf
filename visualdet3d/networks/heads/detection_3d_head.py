@@ -426,7 +426,7 @@ class AnchorBasedDetection3DHead(layers.Layer):
         label = tf.argmax(cls_score, axis=-1)
 
         high_score_mask = (max_score > score_thr)
-        high_score_inds = tf.squeeze(tf.where(high_score_mask))
+        high_score_inds = tf.squeeze(tf.where(high_score_mask), axis=1)
 
         # anchor      = anchor[high_score_mask, :]
         # anchor_mean_std_3d = anchor_mean_std_3d[high_score_mask, :]
